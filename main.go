@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"html/template"
 	"log"
@@ -10,16 +11,31 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", "localhost:8080", "http service address")
+var addr = flag.String("addr", "localhost:8000", "http service address")
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 } // use default options
 
-func echo(w http.ResponseWriter, r *http.Request) {
-	f, err := os.Create("output.md")
+type Status string
+
+const (
+	First  Status = "first"
+	Normal Status = "normal"
+)
+
+type Message struct {
+	Status Status `json:"status"`
+	Data   string `json:"data"`
+}
+
+func write(w http.ResponseWriter, r *http.Request) {
+	f, err := os.Open("output.md")
 	if err != nil {
-		log.Fatalf("Can't open the file")
+		f, err = os.Create("output.md")
+		if err != nil {
+			log.Fatalf("Can't open the file")
+		}
 	}
 
 	c, err := upgrader.Upgrade(w, r, nil)
@@ -30,17 +46,72 @@ func echo(w http.ResponseWriter, r *http.Request) {
 	defer c.Close()
 	for {
 		mt, message, err := c.ReadMessage()
+
+		if err != nil {
+			log.Fatalf("Can't read the message")
+		}
+
+		var m Message
+		err = json.Unmarshal(message, &m)
+
+		if err != nil {
+			log.Fatalf("Can't decode the JSON")
+		}
+
+		log.Printf("%v", m)
+
 		if err != nil {
 			log.Println("read:", err)
 			break
 		}
 		writeToFile(message, f)
-		log.Printf("recv: %s", message)
+		// log.Printf("recv: %s", message)
 		err = c.WriteMessage(mt, message)
 		if err != nil {
 			log.Println("write:", err)
 			break
 		}
+	}
+}
+
+func echo(w http.ResponseWriter, r *http.Request) {
+	f, err := os.Open("output.md")
+	if err != nil {
+		f, err = os.Create("output.md")
+		if err != nil {
+			log.Fatalf("Can't open the file")
+		}
+	}
+
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Print("upgrade:", err)
+		return
+	}
+	defer c.Close()
+	for {
+		var m Message
+		err := c.ReadJSON(&m)
+
+		if err != nil {
+			log.Println("read:", err)
+			break
+		}
+
+		log.Printf("%v", m)
+		if m.Status == First {
+			file := make([]byte, 50)
+			f.Read(file)
+			c.WriteMessage(websocket.TextMessage, file)
+		}
+
+		// writeToFile([]byte(m.Data), f)
+		// // log.Printf("recv: %s", message)
+		// err = c.WriteMessage(websocket.TextMessage, []byte("goof"))
+		// if err != nil {
+		// 	log.Println("write:", err)
+		// 	break
+		// }
 	}
 }
 
