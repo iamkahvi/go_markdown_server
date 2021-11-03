@@ -12,7 +12,7 @@ import (
 
 const FILENAME = "output.md"
 
-var addr = flag.String("addr", "localhost:8000", "http service address")
+var addr = flag.String("addr", "0.0.0.0:8000", "http service address")
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
@@ -117,5 +117,5 @@ func main() {
 	log.SetFlags(0)
 	http.HandleFunc("/write", write)
 	http.HandleFunc("/", home)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	log.Fatal(http.ListenAndServeTLS(*addr, "server.crt", "server.key", nil))
 }
