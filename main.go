@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -14,9 +15,12 @@ const FILENAME = "output.md"
 
 var addr = flag.String("addr", "0.0.0.0:8000", "http service address")
 
+var leader = make(chan int, 100)
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return r.Header.Get("Origin") == "https://write.kahvipatel.com"
+		return true
+		// return r.Header.Get("Origin") == "https://write.kahvipatel.com"
 	},
 }
 
@@ -47,13 +51,16 @@ type ServerMessage struct {
 }
 
 func write(w http.ResponseWriter, r *http.Request) {
-	_, err := os.Open(FILENAME)
-	if os.IsNotExist(err) {
-		_, err = os.Create(FILENAME)
-		if err != nil {
-			log.Fatalf("Can't open the file")
-		}
+	id := len(leader) + 1
+	fmt.Printf("\nnew client %d\n", id)
+
+	// First client in queue:
+	isLeader := len(leader) == 0
+	if isLeader {
+		fmt.Println("found first leader")
 	}
+
+	leader <- id
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -71,7 +78,15 @@ func write(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		// log.Printf("%v", m)
+		// check if client at front of queue
+		if !isLeader && len(leader) == id-1 {
+			isLeader = true
+			fmt.Println("found leader")
+			fmt.Printf("id: %d, len leader: %d\n", id, len(leader))
+		} else {
+			fmt.Printf("id: %d, len leader: %d\n", id, len(leader))
+			continue
+		}
 
 		if m.Type == First {
 			resp := ServerMessage{Status: Success, Type: First, Data: readFile()}
@@ -93,6 +108,8 @@ func write(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	fmt.Println("leaving")
+	<-leader
 }
 
 func writeToFile(value []byte) {
@@ -117,6 +134,17 @@ func home(w http.ResponseWriter, r *http.Request) {
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
+	fmt.Println("hello")
+
+	// check if file exists
+	_, err := os.Open(FILENAME)
+	if os.IsNotExist(err) {
+		_, err = os.Create(FILENAME)
+		if err != nil {
+			log.Fatalf("Can't open the file")
+		}
+	}
+
 	http.HandleFunc("/write", write)
 	http.HandleFunc("/", home)
 	log.Fatal(http.ListenAndServe(*addr, nil))
