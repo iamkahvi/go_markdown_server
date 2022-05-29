@@ -13,14 +13,19 @@ import (
 
 const FILENAME = "output.md"
 
+var isDev = os.Getenv("DEV")
+
 var addr = flag.String("addr", "0.0.0.0:8000", "http service address")
 
 var leader = make(chan int, 100)
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true
-		// return r.Header.Get("Origin") == "https://write.kahvipatel.com"
+		log.Printf("%v", r.Header.Get("Origin"))
+		if isDev == "1" {
+			return true
+		}
+		return r.Header.Get("Origin") == "https://write.kahvipatel.com"
 	},
 }
 
