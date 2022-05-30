@@ -29,26 +29,24 @@ var upgrader = websocket.Upgrader{
 type Type string
 
 const (
-	First  Type = "first"
-	Normal Type = "normal"
+	First Type = "first"
 )
 
 type Status string
 
 const (
-	Success Status = "success"
-	Error   Status = "error"
+	Leader   Status = "leader"
+	Follower Status = "follower"
 )
 
 type ClientMessage struct {
-	Type   Type   `json:"type"`
-	Status Status `json:"status"`
-	Data   string `json:"data"`
+	Type *Type  `json:"type"`
+	Data string `json:"data"`
 }
 
 type ServerMessage struct {
-	Type   Type   `json:"type"`
 	Status Status `json:"status"`
+	Type   Type   `json:"type"`
 	Data   string `json:"data"`
 }
 
@@ -77,20 +75,20 @@ func write(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		// log.Printf("%v", m)
+		log.Printf("THE MESSAGE%v", m.Type)
 
-		if m.Type == First {
-			resp := ServerMessage{Status: Success, Type: First, Data: readFile()}
+		if m.Type == nil {
+			writeToFile([]byte(m.Data))
+
+			resp := ServerMessage{Status: Leader}
 
 			err = c.WriteJSON(resp)
 			if err != nil {
 				log.Println("write:", err)
 				break
 			}
-		} else if m.Type == Normal {
-			writeToFile([]byte(m.Data))
-
-			resp := ServerMessage{Status: Success, Type: Normal, Data: ""}
+		} else if *m.Type == First {
+			resp := ServerMessage{Status: Leader, Type: First, Data: readFile()}
 
 			err = c.WriteJSON(resp)
 			if err != nil {
