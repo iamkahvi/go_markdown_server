@@ -14,8 +14,14 @@ const FILENAME = "output.md"
 
 var addr = flag.String("addr", "0.0.0.0:8000", "http service address")
 
+var isDev = os.Getenv("DEV")
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
+		log.Printf("%v", r.Header.Get("Origin"))
+		if isDev == "1" {
+			return true
+		}
 		return r.Header.Get("Origin") == "https://write.kahvipatel.com"
 	},
 }
