@@ -6,6 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
+
+	"hash/fnv"
 
 	"github.com/gorilla/websocket"
 )
@@ -50,6 +53,72 @@ type ServerMessage struct {
 	Data   string `json:"data"`
 }
 
+type Queue[T uint32 | bool] interface {
+	Head() T
+	Push(T)
+	Pop() (T, bool)
+	Remove(T)
+}
+
+type MyQueue struct {
+	q    []uint32
+	lock sync.RWMutex
+}
+
+type Value interface {
+	// Somehow VScode won't let me define generics
+	uint32 | bool
+}
+
+func (mq *MyQueue) Head() (uint32, bool) {
+	temp, empty := mq.Pop()
+	if empty {
+		return 0, false
+	}
+	mq.Push(temp)
+	return temp, true
+}
+
+func (mq *MyQueue) Push(val uint32) {
+	mq.lock.RLock()
+	mq.q = append(mq.q, val)
+	mq.lock.Unlock()
+}
+
+func (mq *MyQueue) Pop() (uint32, bool) {
+	mq.lock.RLock()
+	if len(mq.q) == 0 {
+		return 0, false
+	}
+
+	var temp = mq.q[len(mq.q)-1]
+	mq.q = mq.q[:len(mq.q)-1]
+	mq.lock.Unlock()
+	return temp, true
+}
+
+func (mq *MyQueue) Remove(val uint32) bool {
+	mq.lock.RLock()
+	defer mq.lock.Unlock()
+
+	for i, v := range mq.q {
+		if v == val {
+			mq.q = append(mq.q[:i], mq.q[i+1:]...)
+			return true
+		}
+	}
+
+	return false
+}
+
+func hash(s string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return h.Sum32()
+}
+
+var actualQueue = MyQueue{q: make([]uint32, 100), lock: sync.RWMutex{}}
+
 func write(w http.ResponseWriter, r *http.Request) {
 	_, err := os.Open(FILENAME)
 	if os.IsNotExist(err) {
@@ -60,10 +129,23 @@ func write(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c, err := upgrader.Upgrade(w, r, nil)
+
+	var clientId = hash(c.RemoteAddr().String())
+
+	c.SetCloseHandler(func(code int, text string) error {
+		actualQueue.Remove(clientId)
+		return nil
+	})
+
+	log.Printf("%v", c.RemoteAddr())
+	actualQueue.Push(clientId)
+
 	if err != nil {
 		log.Print("upgrade:", err)
 		return
 	}
+
+	log.Printf("the queue: %v", actualQueue.q)
 
 	defer c.Close()
 	for {
@@ -77,18 +159,32 @@ func write(w http.ResponseWriter, r *http.Request) {
 
 		log.Printf("THE MESSAGE%v", m.Type)
 
-		if m.Type == nil {
+		head, empty := actualQueue.Head()
+
+		if m.Type == nil && head == clientId {
 			writeToFile([]byte(m.Data))
 
-			resp := ServerMessage{Status: Leader}
+			resp := ServerMessage{Status: Follower}
 
 			err = c.WriteJSON(resp)
 			if err != nil {
 				log.Println("write:", err)
 				break
 			}
-		} else if *m.Type == First {
+		}
+
+		if empty || *m.Type == First && head == clientId {
 			resp := ServerMessage{Status: Leader, Type: First, Data: readFile()}
+
+			err = c.WriteJSON(resp)
+			if err != nil {
+				log.Println("write:", err)
+				break
+			}
+		}
+
+		if head != clientId {
+			resp := ServerMessage{Status: Follower, Data: readFile()}
 
 			err = c.WriteJSON(resp)
 			if err != nil {
