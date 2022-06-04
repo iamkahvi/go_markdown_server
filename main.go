@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync"
 
 	"hash/fnv"
 
@@ -53,71 +52,13 @@ type ServerMessage struct {
 	Data   string `json:"data"`
 }
 
-type Queue[T uint32 | bool] interface {
-	Head() T
-	Push(T)
-	Pop() (T, bool)
-	Remove(T)
-}
-
-type MyQueue struct {
-	q    []uint32
-	lock sync.RWMutex
-}
-
-type Value interface {
-	// Somehow VScode won't let me define generics
-	uint32 | bool
-}
-
-func (mq *MyQueue) Head() (uint32, bool) {
-	temp, empty := mq.Pop()
-	if empty {
-		return 0, false
-	}
-	mq.Push(temp)
-	return temp, true
-}
-
-func (mq *MyQueue) Push(val uint32) {
-	mq.lock.RLock()
-	mq.q = append(mq.q, val)
-	mq.lock.Unlock()
-}
-
-func (mq *MyQueue) Pop() (uint32, bool) {
-	mq.lock.RLock()
-	if len(mq.q) == 0 {
-		return 0, false
-	}
-
-	var temp = mq.q[len(mq.q)-1]
-	mq.q = mq.q[:len(mq.q)-1]
-	mq.lock.Unlock()
-	return temp, true
-}
-
-func (mq *MyQueue) Remove(val uint32) bool {
-	mq.lock.RLock()
-	defer mq.lock.Unlock()
-
-	for i, v := range mq.q {
-		if v == val {
-			mq.q = append(mq.q[:i], mq.q[i+1:]...)
-			return true
-		}
-	}
-
-	return false
-}
-
 func hash(s string) uint32 {
 	h := fnv.New32a()
 	h.Write([]byte(s))
 	return h.Sum32()
 }
 
-var actualQueue = MyQueue{q: make([]uint32, 100), lock: sync.RWMutex{}}
+var actualQueue = MyQueue{q: make([]uint32, 100)}
 
 func write(w http.ResponseWriter, r *http.Request) {
 	_, err := os.Open(FILENAME)
@@ -128,7 +69,13 @@ func write(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// This logs the connected client's domain
 	c, err := upgrader.Upgrade(w, r, nil)
+
+	if err != nil {
+		log.Print("upgrade:", err)
+		return
+	}
 
 	var clientId = hash(c.RemoteAddr().String())
 
@@ -139,11 +86,6 @@ func write(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("%v", c.RemoteAddr())
 	actualQueue.Push(clientId)
-
-	if err != nil {
-		log.Print("upgrade:", err)
-		return
-	}
 
 	log.Printf("the queue: %v", actualQueue.q)
 
