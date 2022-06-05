@@ -1,15 +1,19 @@
-// server --X--> client
+# Notes
+
+## Types
+```typescript
 type ServerMessage = {
   status: "leader" | "follower";
   data: string; // either initial state or live updates from the file
 };
-
-// client --X--> server
 type ClientMessage = {
   data: string; // live updates from the editor
 };
+```
 
-// Case 1
+## Case 1
+
+```typescript
 // 1.
 // client --X--> server
 {
@@ -26,8 +30,11 @@ type ClientMessage = {
 {
   data: "I'm the new state of the editor"
 }
+```
 
-// Case 2
+## Case 2
+
+```typescript
 // 1.
 // client --X--> server
 {
@@ -45,8 +52,10 @@ type ClientMessage = {
   status: "follower",
   data: "I'm the new initial state of the file"
 }
+```
 
-// Case 3
+## Case 3
+```typescript
 // 1.
 // client --X--> server
 {
@@ -69,3 +78,4 @@ type ClientMessage = {
 {
   data: "I'm the new state of the editor"
 }
+```
