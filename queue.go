@@ -1,57 +1,54 @@
 package main
 
-import "log"
+import (
+	"log"
 
-type Queue[T uint32 | bool] interface {
-	Head() T
-	Push(T)
-	Pop() (T, bool)
-	Remove(T)
+	"golang.org/x/exp/constraints"
+)
+
+type MyQueue[T constraints.Integer] struct {
+	q   []T
+	len int
 }
 
-type MyQueue struct {
-	q []uint32
-}
-
-type Value interface {
-	// Somehow VScode won't let me define generics
-	uint32 | bool
-}
-
-func (mq *MyQueue) Head() (uint32, bool) {
+func (mq *MyQueue[uint32]) Head() (uint32, bool) {
 	if len(mq.q) == 0 {
-		return 0, false
+		return uint32(0), true
 	}
 
-	return mq.q[len(mq.q)-1], true
+	log.Println("head: ", mq.q[len(mq.q)-mq.len])
+	return mq.q[len(mq.q)-mq.len], false
 }
 
-func (mq *MyQueue) Push(val uint32) {
+func (mq *MyQueue[uint32]) Push(val uint32) {
 	log.Println("pushing: ", val)
 	mq.q = append(mq.q, val)
+	mq.len += 1
 }
 
-func (mq *MyQueue) Pop() (uint32, bool) {
+func (mq *MyQueue[uint32]) Pop() (uint32, bool) {
 	if len(mq.q) == 0 {
-		return 0, false
+		return 0, true
 	}
 
 	var temp = mq.q[len(mq.q)-1]
 	mq.q = mq.q[:len(mq.q)-1]
+	mq.len -= 1
 
 	log.Println("popping: ", temp)
 
-	return temp, true
+	return temp, false
 }
 
-func (mq *MyQueue) Remove(val uint32) bool {
+func (mq *MyQueue[uint32]) Remove(val uint32) bool {
 	log.Println("removing: ", val)
 	for i, v := range mq.q {
 		if v == val {
 			mq.q = append(mq.q[:i], mq.q[i+1:]...)
-			return true
+			mq.len -= 1
+			return false
 		}
 	}
 
-	return false
+	return true
 }

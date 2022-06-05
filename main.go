@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"hash/fnv"
 
@@ -13,15 +14,16 @@ import (
 )
 
 const FILENAME = "output.md"
+const FOLLOWER_DELAY = 2 * time.Second
+
+var isDev = os.Getenv("DEV") == "1"
 
 var addr = flag.String("addr", "0.0.0.0:8000", "http service address")
-
-var isDev = os.Getenv("DEV")
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		log.Printf("%v", r.Header.Get("Origin"))
-		if isDev == "1" {
+		if isDev {
 			return true
 		}
 		return r.Header.Get("Origin") == "https://write.kahvipatel.com"
@@ -42,7 +44,7 @@ const (
 )
 
 type ClientMessage struct {
-	Type *Type  `json:"type"`
+	Type Type   `json:"type"`
 	Data string `json:"data"`
 }
 
@@ -58,7 +60,7 @@ func hash(s string) uint32 {
 	return h.Sum32()
 }
 
-var actualQueue = MyQueue{q: make([]uint32, 100)}
+var huncho = MyQueue[uint32]{q: make([]uint32, 100)}
 
 func write(w http.ResponseWriter, r *http.Request) {
 	_, err := os.Open(FILENAME)
@@ -73,21 +75,21 @@ func write(w http.ResponseWriter, r *http.Request) {
 	c, err := upgrader.Upgrade(w, r, nil)
 
 	if err != nil {
-		log.Print("upgrade:", err)
+		log.Println("ERROR upgrading: ", err)
 		return
 	}
 
 	var clientId = hash(c.RemoteAddr().String())
+	var clientStatus Status
 
 	c.SetCloseHandler(func(code int, text string) error {
-		actualQueue.Remove(clientId)
+		huncho.Remove(clientId)
 		return nil
 	})
 
-	log.Printf("%v", c.RemoteAddr())
-	actualQueue.Push(clientId)
+	huncho.Push(clientId)
 
-	log.Printf("the queue: %v", actualQueue.q)
+	log.Printf("the queue: %v", huncho.q)
 
 	defer c.Close()
 	for {
@@ -95,44 +97,52 @@ func write(w http.ResponseWriter, r *http.Request) {
 		err := c.ReadJSON(&m)
 
 		if err != nil {
-			log.Println("read:", err)
-			break
+			log.Println("ERROR reading: ", err)
+			return
 		}
 
-		log.Printf("THE MESSAGE%v", m.Type)
+		if m == (ClientMessage{}) {
+			log.Println("empty message")
+		}
 
-		head, empty := actualQueue.Head()
+		head, empty := huncho.Head()
 
-		if m.Type == nil && head == clientId {
-			writeToFile([]byte(m.Data))
+		if empty || head == clientId {
+			log.Println("client is the leader")
+			clientStatus = Leader
+		} else {
+			log.Println("client is follower")
+			clientStatus = Follower
+		}
 
-			resp := ServerMessage{Status: Follower}
+		switch clientStatus {
+		case Leader:
+			if m.Type == First {
+				resp := ServerMessage{Status: Leader, Type: First, Data: readFile()}
 
-			err = c.WriteJSON(resp)
-			if err != nil {
-				log.Println("write:", err)
-				break
+				err = c.WriteJSON(resp)
+			} else {
+				writeToFile([]byte(m.Data))
+				resp := ServerMessage{Status: Leader}
+
+				err = c.WriteJSON(resp)
 			}
-		}
 
-		if empty || *m.Type == First && head == clientId {
-			resp := ServerMessage{Status: Leader, Type: First, Data: readFile()}
-
-			err = c.WriteJSON(resp)
 			if err != nil {
-				log.Println("write:", err)
-				break
+				log.Println("ERROR writing: ", err)
+				os.Exit(1)
 			}
-		}
 
-		if head != clientId {
+		case Follower:
 			resp := ServerMessage{Status: Follower, Data: readFile()}
 
 			err = c.WriteJSON(resp)
 			if err != nil {
-				log.Println("write:", err)
-				break
+				log.Println("ERROR writing: ", err)
+				os.Exit(1)
 			}
+
+			time.Sleep(2 * time.Second)
 		}
 	}
 }
@@ -147,7 +157,7 @@ func writeToFile(value []byte) {
 func readFile() string {
 	data, err := ioutil.ReadFile(FILENAME)
 	if err != nil {
-		log.Fatalf("error reading the file")
+		log.Fatalf("ERROR reading the file")
 	}
 	return string(data)
 }
