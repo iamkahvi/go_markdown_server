@@ -2,10 +2,12 @@ package main
 
 import (
 	"flag"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -29,8 +31,10 @@ var upgrader = websocket.Upgrader{
 type Type string
 
 const (
-	First  Type = "first"
-	Normal Type = "normal"
+	First     Type = "first"
+	Normal    Type = "normal"
+	Increment Type = "increment"
+	Counter   Type = "counter"
 )
 
 type Status string
@@ -52,6 +56,52 @@ type ServerMessage struct {
 	Data   string `json:"data"`
 }
 
+type counterHub struct {
+	mu      sync.Mutex
+	counter int
+	clients map[*websocket.Conn]bool
+}
+
+func newCounterHub() *counterHub {
+	return &counterHub{
+		clients: make(map[*websocket.Conn]bool),
+	}
+}
+
+func (h *counterHub) Register(conn *websocket.Conn) int {
+	h.mu.Lock()
+	h.clients[conn] = true
+	count := h.counter
+	h.mu.Unlock()
+	return count
+}
+
+func (h *counterHub) Unregister(conn *websocket.Conn) {
+	h.mu.Lock()
+	delete(h.clients, conn)
+	h.mu.Unlock()
+}
+
+func (h *counterHub) Increment(delta int) {
+	h.mu.Lock()
+	h.counter += delta
+	count := h.counter
+	clients := make([]*websocket.Conn, 0, len(h.clients))
+	for client := range h.clients {
+		clients = append(clients, client)
+	}
+	h.mu.Unlock()
+
+	msg := ServerMessage{Status: Success, Type: Counter, Data: strconv.Itoa(count)}
+	for _, client := range clients {
+		if err := client.WriteJSON(msg); err != nil {
+			log.Println("broadcast:", err)
+		}
+	}
+}
+
+var sharedCounter = newCounterHub()
+
 func write(w http.ResponseWriter, r *http.Request) {
 	_, err := os.Open(FILENAME)
 	if os.IsNotExist(err) {
@@ -68,6 +118,13 @@ func write(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer c.Close()
+	initialCount := sharedCounter.Register(c)
+	defer sharedCounter.Unregister(c)
+
+	if err := c.WriteJSON(ServerMessage{Status: Success, Type: Counter, Data: strconv.Itoa(initialCount)}); err != nil {
+		log.Println("write:", err)
+	}
+
 	for {
 		var m ClientMessage
 		err := c.ReadJSON(&m)
@@ -77,39 +134,54 @@ func write(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		// log.Printf("%v", m)
-
-		if m.Type == First {
+		switch m.Type {
+		case First:
 			resp := ServerMessage{Status: Success, Type: First, Data: readFile()}
-
-			err = c.WriteJSON(resp)
-			if err != nil {
+			if err := c.WriteJSON(resp); err != nil {
 				log.Println("write:", err)
-				break
+				return
 			}
-		} else if m.Type == Normal {
+		case Normal:
 			writeToFile([]byte(m.Data))
-
 			resp := ServerMessage{Status: Success, Type: Normal, Data: ""}
-
-			err = c.WriteJSON(resp)
-			if err != nil {
+			if err := c.WriteJSON(resp); err != nil {
 				log.Println("write:", err)
-				break
+				return
+			}
+		case Increment:
+			delta := 1
+			trimmed := strings.TrimSpace(m.Data)
+			if trimmed != "" {
+				value, parseErr := strconv.Atoi(trimmed)
+				if parseErr != nil {
+					errResp := ServerMessage{Status: Error, Type: Increment, Data: "invalid increment value"}
+					if err := c.WriteJSON(errResp); err != nil {
+						log.Println("write:", err)
+					}
+					continue
+				}
+				delta = value
+			}
+			sharedCounter.Increment(delta)
+		default:
+			errResp := ServerMessage{Status: Error, Type: m.Type, Data: "unsupported message type"}
+			if err := c.WriteJSON(errResp); err != nil {
+				log.Println("write:", err)
+				return
 			}
 		}
 	}
 }
 
 func writeToFile(value []byte) {
-	err := ioutil.WriteFile(FILENAME, value, os.ModePerm)
+	err := os.WriteFile(FILENAME, value, os.ModePerm)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 func readFile() string {
-	data, err := ioutil.ReadFile(FILENAME)
+	data, err := os.ReadFile(FILENAME)
 	if err != nil {
 		log.Fatalf("error reading the file")
 	}
