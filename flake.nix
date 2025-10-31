@@ -33,6 +33,7 @@
               export GOBIN="$GOPATH/bin"
               export PATH="$GOBIN:$PATH"
               mkdir -p "$GOBIN"
+							DEV=1 go run main.go
             '';
           };
         });
