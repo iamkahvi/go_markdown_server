@@ -1,13 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"strconv"
-	"strings"
-	"sync"
 
 	"github.com/gorilla/websocket"
 )
@@ -28,149 +27,135 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-type Type string
-
-const (
-	First     Type = "first"
-	Normal    Type = "normal"
-	Increment Type = "increment"
-	Counter   Type = "counter"
-)
-
 type Status string
 
 const (
-	Success Status = "success"
-	Error   Status = "error"
+	Ok    Status = "OK"
+	Error Status = "ERROR"
 )
 
-type ClientMessage struct {
-	Type   Type   `json:"type"`
-	Status Status `json:"status"`
-	Data   string `json:"data"`
+type PatchType int
+
+const (
+	Remove PatchType = -1
+	None   PatchType = 0
+	Add    PatchType = 1
+)
+
+type Patch struct {
+	Type  PatchType `json:"type"`  // -1 | 0 | 1
+	Value string    `json:"value"` // string
 }
 
-type ServerMessage struct {
-	Type   Type   `json:"type"`
-	Status Status `json:"status"`
-	Data   string `json:"data"`
-}
-
-type counterHub struct {
-	mu      sync.Mutex
-	counter int
-	clients map[*websocket.Conn]bool
-}
-
-func newCounterHub() *counterHub {
-	return &counterHub{
-		clients: make(map[*websocket.Conn]bool),
+func (p *Patch) UnmarshalJSON(data []byte) error {
+	// expect: [number, string]
+	var raw []json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
 	}
-}
-
-func (h *counterHub) Register(conn *websocket.Conn) int {
-	h.mu.Lock()
-	h.clients[conn] = true
-	count := h.counter
-	h.mu.Unlock()
-	return count
-}
-
-func (h *counterHub) Unregister(conn *websocket.Conn) {
-	h.mu.Lock()
-	delete(h.clients, conn)
-	h.mu.Unlock()
-}
-
-func (h *counterHub) Increment(delta int) {
-	h.mu.Lock()
-	h.counter += delta
-	count := h.counter
-	clients := make([]*websocket.Conn, 0, len(h.clients))
-	for client := range h.clients {
-		clients = append(clients, client)
+	if len(raw) != 2 {
+		return fmt.Errorf("patch must have 2 elements")
 	}
-	h.mu.Unlock()
 
-	msg := ServerMessage{Status: Success, Type: Counter, Data: strconv.Itoa(count)}
-	for _, client := range clients {
-		if err := client.WriteJSON(msg); err != nil {
-			log.Println("broadcast:", err)
-		}
+	if err := json.Unmarshal(raw[0], &p.Type); err != nil {
+		return err
 	}
+	if err := json.Unmarshal(raw[1], &p.Value); err != nil {
+		return err
+	}
+	return nil
 }
 
-var sharedCounter = newCounterHub()
+type Message struct {
+	Patches []Patch `json:"patches"`
+}
 
-func write(w http.ResponseWriter, r *http.Request) {
+type MyResponse struct {
+	Status string `json:"status"`        // "OK" | "ERROR"
+	Doc    string `json:"doc,omitempty"` // optional
+}
+
+type HandlerState struct {
+	num_clients int
+}
+
+func (s *HandlerState) write(w http.ResponseWriter, r *http.Request) {
 	_, err := os.Open(FILENAME)
 	if os.IsNotExist(err) {
+		log.Printf("creating %s", FILENAME)
 		_, err = os.Create(FILENAME)
 		if err != nil {
 			log.Fatalf("Can't open the file")
 		}
 	}
 
+	clientAddr := r.RemoteAddr
+	log.Printf("websocket upgrade requested from %s", clientAddr)
+
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("upgrade:", err)
+		log.Printf("upgrade %s: %v", clientAddr, err)
 		return
 	}
 
-	defer c.Close()
-	initialCount := sharedCounter.Register(c)
-	defer sharedCounter.Unregister(c)
-
-	if err := c.WriteJSON(ServerMessage{Status: Success, Type: Counter, Data: strconv.Itoa(initialCount)}); err != nil {
-		log.Println("write:", err)
-	}
+	defer func() {
+		c.Close()
+		s.num_clients--
+	}()
 
 	for {
-		var m ClientMessage
+		var m Message
 		err := c.ReadJSON(&m)
 
 		if err != nil {
-			log.Println("read:", err)
+			log.Printf("read %s: %v", clientAddr, err)
 			break
 		}
 
-		switch m.Type {
-		case First:
-			resp := ServerMessage{Status: Success, Type: First, Data: readFile()}
+		s.num_clients++
+
+		log.Printf("message %d received from %s", len(m.Patches), clientAddr)
+		log.Printf("total connected clients: %d", s.num_clients)
+
+		if len(m.Patches) == 0 {
+			resp := MyResponse{Status: string(Ok), Doc: readFile()}
+			log.Printf("respond with full file %s", readFile())
 			if err := c.WriteJSON(resp); err != nil {
-				log.Println("write:", err)
+				log.Printf("write %s: %v", clientAddr, err)
 				return
 			}
-		case Normal:
-			writeToFile([]byte(m.Data))
-			resp := ServerMessage{Status: Success, Type: Normal, Data: ""}
+		}
+
+		var doc_string string
+
+		if len(m.Patches) > 1 {
+			doc_string = constructDocString(m.Patches)
+			log.Printf("writing %s to file from %s", doc_string, clientAddr)
+			writeToFile([]byte(doc_string))
+			resp := MyResponse{Status: string(Ok)}
 			if err := c.WriteJSON(resp); err != nil {
-				log.Println("write:", err)
-				return
-			}
-		case Increment:
-			delta := 1
-			trimmed := strings.TrimSpace(m.Data)
-			if trimmed != "" {
-				value, parseErr := strconv.Atoi(trimmed)
-				if parseErr != nil {
-					errResp := ServerMessage{Status: Error, Type: Increment, Data: "invalid increment value"}
-					if err := c.WriteJSON(errResp); err != nil {
-						log.Println("write:", err)
-					}
-					continue
-				}
-				delta = value
-			}
-			sharedCounter.Increment(delta)
-		default:
-			errResp := ServerMessage{Status: Error, Type: m.Type, Data: "unsupported message type"}
-			if err := c.WriteJSON(errResp); err != nil {
-				log.Println("write:", err)
+				log.Printf("write %s: %v", clientAddr, err)
 				return
 			}
 		}
 	}
+}
+
+func constructDocString(patches []Patch) string {
+	var doc_string string
+	for _, patch := range patches {
+		switch patch.Type {
+		case Add:
+			doc_string += patch.Value
+			log.Printf("adding %s", patch.Value)
+		case None:
+			doc_string += patch.Value
+			log.Printf("removing %s", patch.Value)
+		case Remove:
+			log.Printf("leaving %s", patch.Value)
+		}
+	}
+	return doc_string
 }
 
 func writeToFile(value []byte) {
@@ -189,13 +174,18 @@ func readFile() string {
 }
 
 func home(w http.ResponseWriter, r *http.Request) {
+	log.Printf("http %s %s from %s", r.Method, r.URL.Path, r.RemoteAddr)
 	w.Write([]byte("This is a websocket server"))
 }
 
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
-	http.HandleFunc("/write", write)
+
+	s := &HandlerState{}
+
+	http.HandleFunc("/write", s.write)
 	http.HandleFunc("/", home)
+	log.Printf("starting server on %s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, nil))
 }
