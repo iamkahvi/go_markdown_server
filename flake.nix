@@ -24,6 +24,7 @@
           default = pkgs.mkShell {
             packages = with pkgs; [
               go
+              delve
               gopls
               golangci-lint
             ];
@@ -32,8 +33,9 @@
               export GOPATH="$PWD/.gopath"
               export GOBIN="$GOPATH/bin"
               export PATH="$GOBIN:$PATH"
+							export DEV=1
               mkdir -p "$GOBIN"
-							DEV=1 go run main.go
+							alias start="go run ./cmd/server"
             '';
           };
         });

@@ -1,0 +1,5 @@
+# Sample configuration for go_markdown_server.
+addr: 0.0.0.0:8000
+origin: https://write.kahvipatel.com
+documentPath: output.md
+shutdownWait: 5s
