@@ -77,7 +77,7 @@ func (d *Diff) UnmarshalJSON(data []byte) error {
 }
 
 type PatchObj struct {
-	diffs   []Diff `json:"diffs"`
+	Diffs   []Diff `json:"diffs"`
 	Start1  *int   `json:"start1"`
 	Start2  *int   `json:"start2"`
 	Length1 int    `json:"length1"`
@@ -94,7 +94,7 @@ func (p PatchObj) String() string {
 	sb.WriteString(fmt.Sprintf("  Length2: %d\n", p.Length2))
 	sb.WriteString("  Diffs:\n")
 
-	for _, d := range p.diffs {
+	for _, d := range p.Diffs {
 		sb.WriteString(fmt.Sprintf("    [%d, %q]\n", d.Type, d.Text))
 	}
 
@@ -111,10 +111,10 @@ func nullableInt(ptr *int) string {
 
 func (pj *PatchObj) ToDMP(dmp *diffmatchpatch.DiffMatchPatch) diffmatchpatch.Patch {
 	// Build a slice of diffs in the library's type.
-	diffs := make([]diffmatchpatch.Diff, 0, len(pj.diffs))
+	diffs := make([]diffmatchpatch.Diff, 0, len(pj.Diffs))
 	// Also reconstruct text1 as the concatenation of non-insert pieces (preimage)
 	var text1Builder strings.Builder
-	for _, d := range pj.diffs {
+	for _, d := range pj.Diffs {
 		var t diffmatchpatch.Operation
 		switch d.Type {
 		case DiffDelete:
@@ -141,15 +141,4 @@ func (pj *PatchObj) ToDMP(dmp *diffmatchpatch.DiffMatchPatch) diffmatchpatch.Pat
 	}
 	// The PatchObj represents a single patch; return the first one.
 	return patches[0]
-}
-
-// Converter transforms websocket payloads into diffmatchpatch structures.
-type Converter struct {
-	// TODO: add dependencies or configuration as needed.
-}
-
-// Apply converts incoming messages and returns resulting document state.
-func (c *Converter) Apply(payload interface{}) (string, error) {
-	// TODO: implement diff conversion logic.
-	return "", nil
 }

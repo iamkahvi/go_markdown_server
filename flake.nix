@@ -35,7 +35,7 @@
               export PATH="$GOBIN:$PATH"
 							export DEV=1
               mkdir -p "$GOBIN"
-							alias start="go run ./cmd/server"
+							alias s="go run ./cmd/server"
             '';
           };
         });

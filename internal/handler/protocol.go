@@ -5,12 +5,28 @@ import (
 	"fmt"
 
 	"github.com/iamkahvi/text_editor_server/internal/diff"
-	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
 type Message struct {
-	Patches   []diff.Patch           `json:"patches"`
-	PatchObjs []diffmatchpatch.Patch `json:"patchObjs"`
+	Patches   []diff.Patch    `json:"patches"`
+	PatchObjs []diff.PatchObj `json:"patchObjs"`
+}
+
+func (m Message) String() string {
+	payload := struct {
+		Patches   []diff.Patch    `json:"patches"`
+		PatchObjs []diff.PatchObj `json:"patchObjs"`
+	}{
+		Patches:   m.Patches,
+		PatchObjs: m.PatchObjs,
+	}
+
+	b, err := json.MarshalIndent(payload, "", "    ")
+	if err != nil {
+		return fmt.Sprintf("Message{error: %v}", err)
+	}
+
+	return string(b)
 }
 
 // the shape of the incoming message is:
@@ -21,8 +37,8 @@ type Message struct {
 
 func (m *Message) UnmarshalJSON(data []byte) error {
 	type alias struct {
-		Patches   []diff.Patch           `json:"patches"`
-		PatchObjs []diffmatchpatch.Patch `json:"patchObjs"`
+		Patches   []diff.Patch    `json:"patches"`
+		PatchObjs []diff.PatchObj `json:"patchObjs"`
 	}
 
 	var payload alias

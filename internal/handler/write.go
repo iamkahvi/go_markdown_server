@@ -6,29 +6,31 @@ import (
 	"os"
 
 	"github.com/gorilla/websocket"
-	"github.com/iamkahvi/text_editor_server/internal/diff"
 	"github.com/iamkahvi/text_editor_server/internal/storage"
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
-const FILENAME = "output.md"
-
 type HandlerState struct {
-	num_clients int
-	dmp         *diffmatchpatch.DiffMatchPatch
-	file_store  storage.FileStore
-	upgrader    websocket.Upgrader
+	numClients int
+	dmp        *diffmatchpatch.DiffMatchPatch
+	fileStore  storage.FileStore
+	upgrader   websocket.Upgrader
 }
 
-func NewHandlerState(dmp *diffmatchpatch.DiffMatchPatch, num_clients int, file_store storage.FileStore, upgrader websocket.Upgrader) *HandlerState {
-	return &HandlerState{num_clients: num_clients, dmp: dmp, file_store: file_store, upgrader: upgrader}
+func NewHandlerState(
+	dmp *diffmatchpatch.DiffMatchPatch,
+	numClients int,
+	fileStore storage.FileStore,
+	upgrader websocket.Upgrader,
+) *HandlerState {
+	return &HandlerState{numClients: numClients, dmp: dmp, fileStore: fileStore, upgrader: upgrader}
 }
 
 func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
-	_, err := os.Open(s.file_store.FilePath)
+	_, err := os.Open(s.fileStore.FilePath)
 	if os.IsNotExist(err) {
-		log.Printf("creating %s", FILENAME)
-		_, err = os.Create(FILENAME)
+		log.Printf("creating %s", s.fileStore.FilePath)
+		_, err = os.Create(s.fileStore.FilePath)
 		if err != nil {
 			log.Fatalf("Can't open the file")
 		}
@@ -45,7 +47,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		c.Close()
-		s.num_clients--
+		s.numClients--
 	}()
 
 	for {
@@ -57,27 +59,30 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		s.num_clients++
+		s.numClients++
 
-		// log.Printf("message %d received from %s", len(m.Patches), clientAddr)
-		// log.Printf("patch objects %s", m.PatchObjs)
+		log.Printf("message %v", m)
+		log.Printf("file %v", s.fileStore.Read())
+
 		// convert PatchObjs to library Patch type
+		dmpPatches := make([]diffmatchpatch.Patch, 0, len(m.PatchObjs))
+		for _, po := range m.PatchObjs {
+			dmpPatches = append(dmpPatches, po.ToDMP(s.dmp))
+		}
 
-		// result, _ := s.dmp.PatchApply(libPatches, readFile())
-		// log.Printf("patch apply result: %v", result)
+		result, _ := s.dmp.PatchApply(dmpPatches, s.fileStore.Read())
+		log.Printf("patch apply result: %v", result)
 
 		if len(m.Patches) == 0 {
-			resp := MyResponse{Status: "OK", Doc: s.file_store.Read()}
+			resp := MyResponse{Status: "OK", Doc: s.fileStore.Read()}
 			if err := c.WriteJSON(resp); err != nil {
 				return
 			}
 		}
 
-		var doc_string string
-
-		if len(m.Patches) > 1 {
-			doc_string = diff.ConstructDocString(m.Patches)
-			s.file_store.Write([]byte(doc_string))
+		if len(m.Patches) >= 1 {
+			// doc_string := diff.ConstructDocString(m.Patches)
+			s.fileStore.Write([]byte(result))
 			resp := MyResponse{Status: "OK"}
 			if err := c.WriteJSON(resp); err != nil {
 				log.Printf("write %s: %v", clientAddr, err)

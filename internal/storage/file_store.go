@@ -27,6 +27,7 @@ func (s *FileStore) Read() string {
 
 // Write persists the provided document content.
 func (s *FileStore) Write(value []byte) error {
+	log.Printf("writing to file %s", s.FilePath)
 	err := os.WriteFile(s.FilePath, value, os.ModePerm)
 	if err != nil {
 		log.Fatal(err)
