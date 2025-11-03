@@ -1,24 +1,35 @@
 # markdown editor
 
-Markdown editor to use with Websocket server [here](https://github.com/iamkahvi/go_markdown_server).
+Markdown editor to use with the websocket server in `/server`.
 
-## Development
-`npm run start` serves the website on http://localhost:3000.
+## development
+`npm run start` serves the website on http://localhost:3000
 
 ## api design
-
 ```ts
-type Patch = [-1 | 0 | 1, string];
+type Diff = [number, string];
+
+type PatchObj = {
+  diffs: Diff[];
+  start1: number | null;
+  start2: number | null;
+  length1: number;
+  length2: number;
+};
 
 interface Message {
-  patches: Patch[];
+  patches: PatchObj[];
 }
 
 interface MyResponse {
   status: "OK" | "ERROR";
   doc?: string;
 }
+```
 
+### example flow
+
+```ts
 // ex of the first message
 const m: Message = {
     patches: []
@@ -32,29 +43,17 @@ const r: MyResponse = {
 
 // ex of normal message
 const m2: Message = {
-    patches: [
-        [0, "hello world"],
-        [1,"!"]
-    ]
-}
-
-// ex of normal response
-const r2: MyResponse = {
-    status: "OK"
-}
-```
-
-
-## server side logic
-
-```ts
-const fullString = patches.reduce((acc: string, [op, text]: Patch) => {
-  if (op === 1) {
-    return acc + text;
-  } else if (op === 0) {
-    return acc + text;
-  } else {
-    return acc;
-  }
-}, "");
+  patches: [
+    {
+      "diffs": [
+        [0, "lo world"],
+        [1, "!"]
+      ],
+      "start1": 3,
+      "start2": 3,
+      "length1": 8,
+      "length2": 9
+    }
+  ]
+};
 ```

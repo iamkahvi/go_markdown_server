@@ -1,5 +1,5 @@
 # go_markdown_server
-Websocket server to use with markdown editor in browser [here](https://github.com/iamkahvi/markdown-editor).
+Websocket server to use with the markdown editor in `/client`.
 
 ## development
 - if you have nix installed `nix develop` listens on port 8000
