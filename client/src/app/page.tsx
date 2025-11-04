@@ -81,6 +81,10 @@ export default function Home() {
     };
   }, [setIsOpen]);
 
+  useEffect(() => {
+    document.title = `note: ${clientCount}`;
+  }, [clientCount]);
+
   const onChange: OnChange = (val) => {
     if (!ws.current) return;
 
@@ -121,16 +125,22 @@ export default function Home() {
   if (!isOpen) return <div>loading</div>;
 
   return (
-    <div>
+    <div className="ml-auto mr-auto max-w-4xl">
       <div>
-        <h1 className="text-3xl font-bold underline p-4">
-          Notepad: {clientCount}
-        </h1>
+        <h1 className="text-3xl font-bold underline p-4">kahvi's notepad</h1>
       </div>
-      <main className=" w-auto mx-auto p-4">
-        {/* <ReactMDEditor initialValue={initialValue} onChange={onChange} /> */}
-        <MilkdownEditor initialValue={initialValue} onChange={onChange} />
-      </main>
+      <div
+        className="w-auto grid gap-4 mx-4"
+        style={{ gridTemplateColumns: "1fr 200px" }}
+      >
+        <div className="border rounded-md border-gray-300 p-4">
+          {/* <ReactMDEditor initialValue={initialValue} onChange={onChange} /> */}
+          <MilkdownEditor initialValue={initialValue} onChange={onChange} />
+        </div>
+        <div className="border rounded-md border-gray-300 p-4 max-h-20">
+          clients: {clientCount}
+        </div>
+      </div>
     </div>
   );
 }
