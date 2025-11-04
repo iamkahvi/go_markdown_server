@@ -15,7 +15,15 @@ export interface Message {
   patchObjs: PatchObj[];
 }
 
-export interface MyResponse {
+export interface EditorResponse {
+  type: "editor";
   status: "OK" | "ERROR";
   doc?: string;
 }
+
+export interface ClientResponse {
+  type: "client";
+  count: number;
+}
+
+export type MyResponse = EditorResponse | ClientResponse;

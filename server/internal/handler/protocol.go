@@ -60,7 +60,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type MyResponse struct {
-	Status string `json:"status"`
-	Doc    string `json:"doc,omitempty"`
-}
+// type MyResponse struct {
+// 	Status string `json:"status"`
+// 	Doc    string `json:"doc,omitempty"`
+// }

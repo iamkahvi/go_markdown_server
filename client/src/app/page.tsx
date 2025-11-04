@@ -20,6 +20,7 @@ export default function Home() {
   const syncedValueRef = useRef("");
   const [isOpen, setIsOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>();
+  const [clientCount, setClientCount] = useState<number | null>(null);
 
   useEffect(() => {
     ws.current = new WebSocket(SERVER_URL);
@@ -43,17 +44,28 @@ export default function Home() {
       const message: MyResponse = JSON.parse(evt.data);
 
       console.log("RECEIVED: " + JSON.stringify(message));
-      if (message.status === "OK" && message.doc) {
-        console.log("OK from server, doc: ", message.doc);
-        // set the initial value of the editor
-        setInitialValue(message.doc);
-        // setSyncedValue(message.doc);
-        syncedValueRef.current = message.doc;
-      }
 
-      if (message.status === "ERROR") {
-        console.log("ERROR from server");
-        // stop showing editor
+      switch (message.type) {
+        case "client":
+          setClientCount(message.count);
+          break;
+        case "editor":
+          {
+            if (message.status === "OK" && message.doc) {
+              console.log("OK from server, doc: ", message.doc);
+              // set the initial value of the editor
+              setInitialValue(message.doc);
+              syncedValueRef.current = message.doc;
+            }
+
+            if (message.status === "ERROR") {
+              console.log("ERROR from server");
+              // stop showing editor
+              setIsOpen(false);
+              window.alert("An error occurred while syncing with the server.");
+            }
+          }
+          break;
       }
     };
 
@@ -111,10 +123,12 @@ export default function Home() {
   return (
     <div>
       <div>
-        <h1 className="text-3xl font-bold underline p-4">Notepad</h1>
+        <h1 className="text-3xl font-bold underline p-4">
+          Notepad: {clientCount}
+        </h1>
       </div>
       <main className=" w-auto mx-auto p-4">
-        <ReactMDEditor initialValue={initialValue} onChange={onChange} />
+        {/* <ReactMDEditor initialValue={initialValue} onChange={onChange} /> */}
         <MilkdownEditor initialValue={initialValue} onChange={onChange} />
       </main>
     </div>

@@ -44,6 +44,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 		log.Printf("upgrade %s: %v", clientAddr, err)
 		return
 	}
+	s.numClients++
 
 	defer func() {
 		c.Close()
@@ -59,7 +60,14 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		s.numClients++
+		payload, err := MarshalMyResponse(&ClientResponse{Count: s.numClients})
+		if err != nil {
+			log.Printf("marshal response: %v", err)
+			return
+		}
+		if err := c.WriteJSON(payload); err != nil {
+			return
+		}
 
 		log.Printf("message %v", m)
 		log.Printf("file %v", s.fileStore.Read())
@@ -74,8 +82,12 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 		log.Printf("patch apply result: %v", result)
 
 		if len(m.Patches) == 0 {
-			resp := MyResponse{Status: "OK", Doc: s.fileStore.Read()}
-			if err := c.WriteJSON(resp); err != nil {
+			payload, err := MarshalMyResponse(&EditorResponse{Status: "OK", Doc: s.fileStore.Read()})
+			if err != nil {
+				log.Printf("marshal response: %v", err)
+				return
+			}
+			if err := c.WriteJSON(payload); err != nil {
 				return
 			}
 		}
@@ -83,8 +95,12 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 		if len(m.Patches) >= 1 {
 			// doc_string := diff.ConstructDocString(m.Patches)
 			s.fileStore.Write([]byte(result))
-			resp := MyResponse{Status: "OK"}
-			if err := c.WriteJSON(resp); err != nil {
+			payload, err := MarshalMyResponse(&EditorResponse{Status: "OK"})
+			if err != nil {
+				log.Printf("marshal response: %v", err)
+				return
+			}
+			if err := c.WriteJSON(payload); err != nil {
 				log.Printf("write %s: %v", clientAddr, err)
 				return
 			}
