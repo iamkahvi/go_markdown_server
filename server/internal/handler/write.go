@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -38,53 +39,50 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	ctx, cancel := context.WithCancel(r.Context())
 	clientAddr := r.RemoteAddr
 	log.Printf("websocket upgrade requested from %s", clientAddr)
-
 	c, err := s.upgrader.Upgrade(w, r, nil)
+
+	connCh := make(chan Message, 1) // drain ws reads
+	errCh := make(chan error, 1)    // propagate read errors
+
+	defer func() {
+		log.Printf("closing the connection")
+		c.Close()
+		cancel()
+		close(connCh)
+		close(errCh)
+		s.numClients--
+	}()
+
 	if err != nil {
 		log.Printf("upgrade %s: %v", clientAddr, err)
 		return
 	}
 	s.numClients++
 
-	defer func() {
-		c.Close()
-		s.numClients--
+	go func() {
+		for {
+			var m Message
+			err := c.ReadJSON(&m)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			select {
+			case connCh <- m:
+			case <-ctx.Done():
+				return
+			default:
+			}
+		}
 	}()
 
 	for {
-		var m Message
-		err := c.ReadJSON(&m)
-
-		if err != nil {
-			log.Printf("error marshalling json %v", err)
-			break
-		}
-
-		payload, err := MarshalMyResponse(&ClientResponse{Count: s.numClients})
-		if err != nil {
-			log.Printf("marshal response: %v", err)
-			return
-		}
-		if err := c.WriteJSON(payload); err != nil {
-			return
-		}
-
-		log.Printf("message %v", m)
-		log.Printf("file %v", s.fileStore.Read())
-
-		// convert PatchObjs to library Patch type
-		dmpPatches := make([]diffmatchpatch.Patch, 0, len(m.PatchObjs))
-		for _, po := range m.PatchObjs {
-			dmpPatches = append(dmpPatches, po.ToDMP(s.dmp))
-		}
-
-		result, _ := s.dmp.PatchApply(dmpPatches, s.fileStore.Read())
-		log.Printf("patch apply result: %v", result)
-
-		if len(m.Patches) == 0 {
-			payload, err := MarshalMyResponse(&EditorResponse{Status: "OK", Doc: s.fileStore.Read()})
+		select {
+		case m := <-connCh:
+			payload, err := MarshalMyResponse(&ClientResponse{Count: s.numClients})
 			if err != nil {
 				log.Printf("marshal response: %v", err)
 				return
@@ -92,20 +90,46 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 			if err := c.WriteJSON(payload); err != nil {
 				return
 			}
-		}
 
-		if len(m.Patches) >= 1 {
-			// doc_string := diff.ConstructDocString(m.Patches)
-			s.fileStore.Write([]byte(result))
-			payload, err := MarshalMyResponse(&EditorResponse{Status: "OK"})
-			if err != nil {
-				log.Printf("marshal response: %v", err)
-				return
+			log.Printf("message %v", m)
+			log.Printf("file %v", s.fileStore.Read())
+
+			// convert PatchObjs to library Patch type
+			dmpPatches := make([]diffmatchpatch.Patch, 0, len(m.PatchObjs))
+			for _, po := range m.PatchObjs {
+				dmpPatches = append(dmpPatches, po.ToDMP(s.dmp))
 			}
-			if err := c.WriteJSON(payload); err != nil {
-				log.Printf("write %s: %v", clientAddr, err)
-				return
+
+			result, _ := s.dmp.PatchApply(dmpPatches, s.fileStore.Read())
+			log.Printf("patch apply result: %v", result)
+
+			if len(m.Patches) == 0 {
+				payload, err := MarshalMyResponse(&EditorResponse{Status: "OK", Doc: s.fileStore.Read()})
+				if err != nil {
+					log.Printf("marshal response: %v", err)
+					return
+				}
+				if err := c.WriteJSON(payload); err != nil {
+					return
+				}
 			}
+
+			if len(m.Patches) >= 1 {
+				// doc_string := diff.ConstructDocString(m.Patches)
+				s.fileStore.Write([]byte(result))
+				payload, err := MarshalMyResponse(&EditorResponse{Status: "OK"})
+				if err != nil {
+					log.Printf("marshal response: %v", err)
+					return
+				}
+				if err := c.WriteJSON(payload); err != nil {
+					log.Printf("write %s: %v", clientAddr, err)
+					return
+				}
+			}
+		case err := <-errCh:
+			log.Printf("read %s: %v", clientAddr, err)
+			return
 		}
 	}
 }
