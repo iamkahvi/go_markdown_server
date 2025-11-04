@@ -7,6 +7,10 @@ import (
 	"github.com/iamkahvi/text_editor_server/internal/diff"
 )
 
+type Broadcast struct {
+	NumClients int
+}
+
 type Message struct {
 	Patches   []diff.Patch    `json:"patches"`
 	PatchObjs []diff.PatchObj `json:"patchObjs"`

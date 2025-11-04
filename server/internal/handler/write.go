@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/gorilla/websocket"
+	"github.com/iamkahvi/text_editor_server/internal/broker"
 	"github.com/iamkahvi/text_editor_server/internal/storage"
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
@@ -15,6 +16,7 @@ type HandlerState struct {
 	dmp        *diffmatchpatch.DiffMatchPatch
 	fileStore  storage.FileStore
 	upgrader   websocket.Upgrader
+	broker     *broker.Broker[Broadcast]
 }
 
 func NewHandlerState(
@@ -23,7 +25,7 @@ func NewHandlerState(
 	fileStore storage.FileStore,
 	upgrader websocket.Upgrader,
 ) *HandlerState {
-	return &HandlerState{numClients: numClients, dmp: dmp, fileStore: fileStore, upgrader: upgrader}
+	return &HandlerState{numClients: numClients, dmp: dmp, fileStore: fileStore, upgrader: upgrader, broker: broker.NewBroker[Broadcast]()}
 }
 
 func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
