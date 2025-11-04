@@ -1,38 +1,12 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
-import type { ContextStore } from "@uiw/react-md-editor";
 import diff_match_patch from "diff-match-patch";
-import Editor from "./editor";
+import { ReactMDEditor } from "./editors/react-md-editor";
+import { Diff, Message, MyResponse, PatchObj } from "./protocol";
+import { OnChange } from "./editors/types";
+import { MilkdownEditor } from "./editors/milkdown-editor";
 
-type OnChange = (
-  value?: string,
-  event?: React.ChangeEvent<HTMLTextAreaElement>,
-  state?: ContextStore
-) => void;
-
-type Diff = [number, string];
-
-type PatchObj = {
-  diffs: Diff[];
-  start1: number | null;
-  start2: number | null;
-  length1: number;
-  length2: number;
-};
-
-type Patch = [-1 | 0 | 1, string];
-
-interface Message {
-  patches: Patch[];
-  patchObjs: PatchObj[];
-}
-
-interface MyResponse {
-  status: "OK" | "ERROR";
-  doc?: string;
-}
-
-const SERVER_URL = "ws://localhost:8000/write";
+const SERVER_URL = "ws://100.116.9.20:8000/write";
 
 const FIRST_MESSAGE: Message = {
   patches: [],
@@ -42,8 +16,8 @@ const FIRST_MESSAGE: Message = {
 export default function Home() {
   const diffMatchPatch = new diff_match_patch();
   const ws = useRef<WebSocket | null>(null);
-  const [value, setValue] = useState("");
-  const [syncedValue, setSyncedValue] = useState("");
+  const [initialValue, setInitialValue] = useState<string | null>(null);
+  const syncedValueRef = useRef("");
   const [isOpen, setIsOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>();
 
@@ -71,8 +45,10 @@ export default function Home() {
       console.log("RECEIVED: " + JSON.stringify(message));
       if (message.status === "OK" && message.doc) {
         console.log("OK from server, doc: ", message.doc);
-        setValue(message.doc);
-        setSyncedValue(message.doc);
+        // set the initial value of the editor
+        setInitialValue(message.doc);
+        // setSyncedValue(message.doc);
+        syncedValueRef.current = message.doc;
       }
 
       if (message.status === "ERROR") {
@@ -105,11 +81,14 @@ export default function Home() {
     }
 
     timeoutRef.current = setTimeout(() => {
-      setSyncedValue(messageData);
       if (ws.current) {
-        const patches = diffMatchPatch.diff_main(syncedValue, messageData);
+        const previousSyncedValue = syncedValueRef.current;
+        const patches = diffMatchPatch.diff_main(
+          previousSyncedValue,
+          messageData
+        );
         const patchObjs: PatchObj[] = diffMatchPatch
-          .patch_make(syncedValue, messageData)
+          .patch_make(previousSyncedValue, messageData)
           .map((patch: any) => {
             return {
               diffs: patch.diffs as Diff[],
@@ -119,21 +98,25 @@ export default function Home() {
               length2: patch.length2,
             };
           });
-        // TODO: i should be sending patches to the server, not the whole document
         const message: Message = { patches, patchObjs };
+        syncedValueRef.current = messageData;
         console.log("sending: ", message);
         ws.current.send(JSON.stringify(message));
       }
     }, 50);
-
-    setValue(messageData);
   };
 
   if (!isOpen) return <div>loading</div>;
 
   return (
-    <main className=" w-auto mx-auto p-4">
-      <Editor value={value} onChange={onChange} />
-    </main>
+    <div>
+      <div>
+        <h1 className="text-3xl font-bold underline p-4">Notepad</h1>
+      </div>
+      <main className=" w-auto mx-auto p-4">
+        <ReactMDEditor initialValue={initialValue} onChange={onChange} />
+        <MilkdownEditor initialValue={initialValue} onChange={onChange} />
+      </main>
+    </div>
   );
 }
