@@ -131,9 +131,13 @@ export default function Home() {
       </div>
       <div
         className="w-auto grid gap-4 mx-4"
+        // TODO: make this responsive 🤦‍♂️
         style={{ gridTemplateColumns: "1fr 200px" }}
       >
-        <div className="border rounded-md border-gray-300 p-4">
+        <div
+          className="border rounded-md border-gray-300 p-4 overflow-scroll"
+          style={{ height: "36rem" }}
+        >
           {/* <ReactMDEditor initialValue={initialValue} onChange={onChange} /> */}
           <MilkdownEditor initialValue={initialValue} onChange={onChange} />
         </div>

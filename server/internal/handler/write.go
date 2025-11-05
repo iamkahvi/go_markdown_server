@@ -17,7 +17,7 @@ type HandlerState struct {
 	dmp        *diffmatchpatch.DiffMatchPatch
 	fileStore  storage.FileStore
 	upgrader   websocket.Upgrader
-	broker     *broker.Broker[Broadcast]
+	broker     broker.Broker[Broadcast]
 }
 
 func NewHandlerState(
@@ -25,8 +25,9 @@ func NewHandlerState(
 	numClients int,
 	fileStore storage.FileStore,
 	upgrader websocket.Upgrader,
+	broker broker.Broker[Broadcast],
 ) *HandlerState {
-	return &HandlerState{numClients: numClients, dmp: dmp, fileStore: fileStore, upgrader: upgrader, broker: broker.NewBroker[Broadcast]()}
+	return &HandlerState{numClients: numClients, dmp: dmp, fileStore: fileStore, upgrader: upgrader, broker: broker}
 }
 
 func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
@@ -44,23 +45,29 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 	log.Printf("websocket upgrade requested from %s", clientAddr)
 	c, err := s.upgrader.Upgrade(w, r, nil)
 
-	connCh := make(chan Message, 1) // drain ws reads
-	errCh := make(chan error, 1)    // propagate read errors
+	messageCh := make(chan Message, 1) // drain ws reads
+	errCh := make(chan error, 1)       // propagate read errors
+
+	broadcastCh := s.broker.Subscribe()
 
 	defer func() {
 		log.Printf("closing the connection")
+		s.numClients--
+		s.broker.Publish(Broadcast{s.numClients})
+		s.broker.Unsubscribe(broadcastCh)
+		close(messageCh)
+		close(errCh)
 		c.Close()
 		cancel()
-		close(connCh)
-		close(errCh)
-		s.numClients--
 	}()
 
 	if err != nil {
 		log.Printf("upgrade %s: %v", clientAddr, err)
 		return
 	}
+
 	s.numClients++
+	s.broker.Publish(Broadcast{s.numClients})
 
 	go func() {
 		for {
@@ -71,7 +78,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			select {
-			case connCh <- m:
+			case messageCh <- m:
 			case <-ctx.Done():
 				return
 			default:
@@ -81,7 +88,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 
 	for {
 		select {
-		case m := <-connCh:
+		case m := <-messageCh:
 			payload, err := MarshalMyResponse(&ClientResponse{Count: s.numClients})
 			if err != nil {
 				log.Printf("marshal response: %v", err)
@@ -91,8 +98,8 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			log.Printf("message %v", m)
-			log.Printf("file %v", s.fileStore.Read())
+			// log.Printf("message %v", m)
+			// log.Printf("file %v", s.fileStore.Read())
 
 			// convert PatchObjs to library Patch type
 			dmpPatches := make([]diffmatchpatch.Patch, 0, len(m.PatchObjs))
@@ -101,7 +108,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 			}
 
 			result, _ := s.dmp.PatchApply(dmpPatches, s.fileStore.Read())
-			log.Printf("patch apply result: %v", result)
+			// log.Printf("patch apply result: %v", result)
 
 			if len(m.Patches) == 0 {
 				payload, err := MarshalMyResponse(&EditorResponse{Status: "OK", Doc: s.fileStore.Read()})
@@ -126,6 +133,16 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 					log.Printf("write %s: %v", clientAddr, err)
 					return
 				}
+			}
+		case b := <-broadcastCh:
+			log.Printf("got a broadcast: %v", b.NumClients)
+			payload, err := MarshalMyResponse(&ClientResponse{Count: b.NumClients})
+			if err != nil {
+				log.Printf("marshal response: %v", err)
+				return
+			}
+			if err := c.WriteJSON(payload); err != nil {
+				return
 			}
 		case err := <-errCh:
 			log.Printf("read %s: %v", clientAddr, err)
