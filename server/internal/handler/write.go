@@ -6,29 +6,9 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gorilla/websocket"
-	"github.com/iamkahvi/text_editor_server/internal/broker"
-	"github.com/iamkahvi/text_editor_server/internal/storage"
+	"github.com/google/uuid"
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
-
-type HandlerState struct {
-	numClients int
-	dmp        *diffmatchpatch.DiffMatchPatch
-	fileStore  storage.FileStore
-	upgrader   websocket.Upgrader
-	broker     broker.Broker[Broadcast]
-}
-
-func NewHandlerState(
-	dmp *diffmatchpatch.DiffMatchPatch,
-	numClients int,
-	fileStore storage.FileStore,
-	upgrader websocket.Upgrader,
-	broker broker.Broker[Broadcast],
-) *HandlerState {
-	return &HandlerState{numClients: numClients, dmp: dmp, fileStore: fileStore, upgrader: upgrader, broker: broker}
-}
 
 func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 	_, err := os.Open(s.fileStore.FilePath)
@@ -44,6 +24,8 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 	clientAddr := r.RemoteAddr
 	log.Printf("websocket upgrade requested from %s", clientAddr)
 	c, err := s.upgrader.Upgrade(w, r, nil)
+	connectionId := uuid.New().String()
+	s.addClient(connectionId)
 
 	messageCh := make(chan Message, 1) // drain ws reads
 	errCh := make(chan error, 1)       // propagate read errors
@@ -53,6 +35,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		log.Printf("closing the connection")
 		s.numClients--
+		s.removeClient(connectionId)
 		s.broker.Publish(Broadcast{s.numClients})
 		s.broker.Unsubscribe(broadcastCh)
 		close(messageCh)
@@ -133,6 +116,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 					log.Printf("write %s: %v", clientAddr, err)
 					return
 				}
+				s.broker.Publish(Broadcast{s.numClients})
 			}
 		case b := <-broadcastCh:
 			log.Printf("got a broadcast: %v", b.NumClients)

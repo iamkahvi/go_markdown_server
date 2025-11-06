@@ -15,6 +15,18 @@ export interface Message {
   patchObjs: PatchObj[];
 }
 
+export interface StateResponse {
+  type: "state";
+  state: "EDITOR" | "READER";
+  initialDoc: string;
+}
+
+export interface ReaderResponse {
+  type: "reader";
+  status: "OK" | "ERROR";
+  doc: string;
+}
+
 export interface EditorResponse {
   type: "editor";
   status: "OK" | "ERROR";
