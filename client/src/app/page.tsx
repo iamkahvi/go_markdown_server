@@ -43,29 +43,33 @@ export default function Home() {
     ws.current.onmessage = function (evt) {
       const message: MyResponse = JSON.parse(evt.data);
 
-      console.log("RECEIVED: " + JSON.stringify(message));
+      console.log(`RECEIVED ${message.type}: ` + JSON.stringify(message));
 
       switch (message.type) {
         case "client":
           setClientCount(message.count);
           break;
-        case "editor":
-          {
-            if (message.status === "OK" && message.doc) {
-              console.log("OK from server, doc: ", message.doc);
-              // set the initial value of the editor
-              setInitialValue(message.doc);
-              syncedValueRef.current = message.doc;
-            }
+        case "editor": {
+          if (message.status === "OK" && message.doc) {
+            // set the initial value of the editor
+            setInitialValue(message.doc);
+            syncedValueRef.current = message.doc;
+          }
 
-            if (message.status === "ERROR") {
-              console.log("ERROR from server");
-              // stop showing editor
-              setIsOpen(false);
-              window.alert("An error occurred while syncing with the server.");
-            }
+          if (message.status === "ERROR") {
+            console.log("ERROR from server");
+            // stop showing editor
+            setIsOpen(false);
+            window.alert("An error occurred while syncing with the server.");
           }
           break;
+        }
+        case "state": {
+          break;
+        }
+        case "reader": {
+          break;
+        }
       }
     };
 

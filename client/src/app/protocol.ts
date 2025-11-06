@@ -38,4 +38,8 @@ export interface ClientResponse {
   count: number;
 }
 
-export type MyResponse = EditorResponse | ClientResponse;
+export type MyResponse =
+  | EditorResponse
+  | ClientResponse
+  | StateResponse
+  | ReaderResponse;

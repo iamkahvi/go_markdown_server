@@ -26,17 +26,16 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 	c, err := s.upgrader.Upgrade(w, r, nil)
 	connectionId := uuid.New().String()
 	s.addClient(connectionId)
+	s.broker.Publish(Broadcast{})
 
-	messageCh := make(chan Message, 1) // drain ws reads
-	errCh := make(chan error, 1)       // propagate read errors
-
+	messageCh := make(chan Message, 1)
+	errCh := make(chan error, 1)
 	broadcastCh := s.broker.Subscribe()
 
 	defer func() {
 		log.Printf("closing the connection")
-		s.numClients--
 		s.removeClient(connectionId)
-		s.broker.Publish(Broadcast{s.numClients})
+		s.broker.Publish(Broadcast{})
 		s.broker.Unsubscribe(broadcastCh)
 		close(messageCh)
 		close(errCh)
@@ -49,9 +48,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.numClients++
-	s.broker.Publish(Broadcast{s.numClients})
-
+	// this gorountine reads from the websocket and pushes to a channel that we can select on
 	go func() {
 		for {
 			var m Message
@@ -72,6 +69,8 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case m := <-messageCh:
+			// parse the message
+			// TODO: the go routine could do this
 			payload, err := MarshalMyResponse(&ClientResponse{Count: s.numClients})
 			if err != nil {
 				log.Printf("marshal response: %v", err)
@@ -81,19 +80,8 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			// log.Printf("message %v", m)
-			// log.Printf("file %v", s.fileStore.Read())
-
-			// convert PatchObjs to library Patch type
-			dmpPatches := make([]diffmatchpatch.Patch, 0, len(m.PatchObjs))
-			for _, po := range m.PatchObjs {
-				dmpPatches = append(dmpPatches, po.ToDMP(s.dmp))
-			}
-
-			result, _ := s.dmp.PatchApply(dmpPatches, s.fileStore.Read())
-			// log.Printf("patch apply result: %v", result)
-
-			if len(m.Patches) == 0 {
+			// if there are no patch objs, it's probably the first request
+			if len(m.PatchObjs) == 0 {
 				payload, err := MarshalMyResponse(&EditorResponse{Status: "OK", Doc: s.fileStore.Read()})
 				if err != nil {
 					log.Printf("marshal response: %v", err)
@@ -104,8 +92,14 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			if len(m.Patches) >= 1 {
-				// doc_string := diff.ConstructDocString(m.Patches)
+			// if there are patch obj and this client is the editor, we'll apply them to the file
+			if len(m.PatchObjs) >= 1 {
+				// convert PatchObjs to library Patch type
+				dmpPatches := make([]diffmatchpatch.Patch, 0, len(m.PatchObjs))
+				for _, po := range m.PatchObjs {
+					dmpPatches = append(dmpPatches, po.ToDMP(s.dmp))
+				}
+				result, _ := s.dmp.PatchApply(dmpPatches, s.fileStore.Read())
 				s.fileStore.Write([]byte(result))
 				payload, err := MarshalMyResponse(&EditorResponse{Status: "OK"})
 				if err != nil {
@@ -116,11 +110,10 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 					log.Printf("write %s: %v", clientAddr, err)
 					return
 				}
-				s.broker.Publish(Broadcast{s.numClients})
 			}
-		case b := <-broadcastCh:
-			log.Printf("got a broadcast: %v", b.NumClients)
-			payload, err := MarshalMyResponse(&ClientResponse{Count: b.NumClients})
+		case <-broadcastCh:
+			log.Printf("got a broadcast: %v", len(s.clientInfoList))
+			payload, err := MarshalMyResponse(&ClientResponse{Count: len(s.clientInfoList)})
 			if err != nil {
 				log.Printf("marshal response: %v", err)
 				return

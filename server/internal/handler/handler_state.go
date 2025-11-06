@@ -17,9 +17,9 @@ type HandlerState struct {
 	upgrader   websocket.Upgrader
 	broker     broker.Broker[Broadcast]
 	// the string in both these cases is a uuid
-	mu             sync.Mutex
+	mu             *sync.Mutex
 	clientIndexMap map[string]int
-	clientInfoMap  []ClientState
+	clientInfoList []ClientState
 }
 
 type ClientStateState int
@@ -40,14 +40,14 @@ func (s *HandlerState) addClient(id string) {
 	defer s.mu.Unlock()
 
 	var state ClientStateState
-	if (len(s.clientInfoMap)) == 0 {
+	if (len(s.clientInfoList)) == 0 {
 		state = EDITOR
 	} else {
 		state = READER
 	}
 
-	s.clientIndexMap[id] = len(s.clientInfoMap)
-	s.clientInfoMap = append(s.clientInfoMap, ClientState{
+	s.clientIndexMap[id] = len(s.clientInfoList)
+	s.clientInfoList = append(s.clientInfoList, ClientState{
 		id:             id,
 		state:          state,
 		connectionTime: time.Now(),
@@ -65,12 +65,12 @@ func (s *HandlerState) removeClient(id string) {
 
 	delete(s.clientIndexMap, id)
 
-	copy(s.clientInfoMap[index:], s.clientInfoMap[index+1:])
-	s.clientInfoMap = s.clientInfoMap[:len(s.clientInfoMap)-1]
+	copy(s.clientInfoList[index:], s.clientInfoList[index+1:])
+	s.clientInfoList = s.clientInfoList[:len(s.clientInfoList)-1]
 
 	// update indices in the map
-	for i := index; i < len(s.clientInfoMap); i++ {
-		s.clientIndexMap[s.clientInfoMap[i].id] = i
+	for i := index; i < len(s.clientInfoList); i++ {
+		s.clientIndexMap[s.clientInfoList[i].id] = i
 	}
 }
 
@@ -81,5 +81,18 @@ func NewHandlerState(
 	upgrader websocket.Upgrader,
 	broker broker.Broker[Broadcast],
 ) *HandlerState {
-	return &HandlerState{numClients: numClients, dmp: dmp, fileStore: fileStore, upgrader: upgrader, broker: broker}
+	mu := &sync.Mutex{}
+	clientIndexMap := make(map[string]int)
+	clientInfoList := make([]ClientState, 0)
+
+	return &HandlerState{
+		numClients:     numClients,
+		dmp:            dmp,
+		fileStore:      fileStore,
+		upgrader:       upgrader,
+		broker:         broker,
+		mu:             mu,
+		clientIndexMap: clientIndexMap,
+		clientInfoList: clientInfoList,
+	}
 }
