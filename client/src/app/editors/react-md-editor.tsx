@@ -11,7 +11,11 @@ type MDEditorOnChange = (
   state?: ContextStore
 ) => void;
 
-export function ReactMDEditor({ initialValue, onChange }: EditorProps) {
+export function ReactMDEditor({
+  initialValue,
+  onChange,
+  editable,
+}: EditorProps) {
   const [value, setValue] = React.useState<string>();
 
   useEffect(() => {
@@ -25,7 +29,13 @@ export function ReactMDEditor({ initialValue, onChange }: EditorProps) {
 
   return (
     <div className="container">
-      <MDEditor value={value} onChange={onChangeInternal} />
+      <MDEditor
+        value={value}
+        onChange={onChangeInternal}
+        preview="edit"
+        textareaProps={{ disabled: !editable }}
+        hideToolbar={true}
+      />
     </div>
   );
 }

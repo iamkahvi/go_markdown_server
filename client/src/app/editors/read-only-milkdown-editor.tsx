@@ -1,4 +1,9 @@
-import { Editor, rootCtx } from "@milkdown/kit/core";
+import {
+  defaultValueCtx,
+  Editor,
+  editorViewOptionsCtx,
+  rootCtx,
+} from "@milkdown/kit/core";
 
 import {
   Milkdown,
@@ -10,20 +15,19 @@ import { commonmark } from "@milkdown/kit/preset/commonmark";
 import { nord } from "@milkdown/theme-nord";
 
 import "@milkdown/theme-nord/style.css";
-import { listener, listenerCtx } from "@milkdown/kit/plugin/listener";
-import { EditorProps } from "./types";
+import { listener } from "@milkdown/kit/plugin/listener";
 import { useEffect } from "react";
 import { replaceAll } from "@milkdown/kit/utils";
 
-function MilkdownEditorInner({ initialValue, onChange }: EditorProps) {
+function MilkdownEditorInner({ value }: { value: string | null }) {
   useEditor((root) => {
     const editor = Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, root);
-        ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
-          // Save content to your backend or storage
-          onChange(markdown);
-        });
+        ctx.update(editorViewOptionsCtx, (prev) => ({
+          ...prev,
+          editable: () => false,
+        }));
       })
       .config(nord)
       .use(commonmark)
@@ -36,18 +40,18 @@ function MilkdownEditorInner({ initialValue, onChange }: EditorProps) {
   const editor = getInstance();
 
   useEffect(() => {
-    if (initialValue !== null && editor) {
-      editor.action(replaceAll(initialValue));
+    if (value !== null && editor) {
+      editor.action(replaceAll(value));
     }
-  }, [initialValue, editor]);
+  }, [value, editor]);
 
   return <Milkdown />;
 }
 
-export function MilkdownEditor({ initialValue, onChange }: EditorProps) {
+export function ReadOnlyMilkdownEditor({ value }: { value: string | null }) {
   return (
     <MilkdownProvider>
-      <MilkdownEditorInner initialValue={initialValue} onChange={onChange} />
+      <MilkdownEditorInner value={value} />
     </MilkdownProvider>
   );
 }
