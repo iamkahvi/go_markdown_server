@@ -71,7 +71,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 		case m := <-messageCh:
 			// parse the message
 			// TODO: the go routine could do this
-			payload, err := MarshalMyResponse(&ClientResponse{Count: s.numClients})
+			payload, err := MarshalMyResponse(&ClientResponse{Count: len(s.clientInfoList)})
 			if err != nil {
 				log.Printf("marshal response: %v", err)
 				return

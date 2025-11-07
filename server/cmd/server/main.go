@@ -39,7 +39,7 @@ func main() {
 	broker := broker.NewBroker[handler.Broadcast]()
 	go broker.Start()
 	defer broker.Stop()
-	s := handler.NewHandlerState(dmp, 0, *fileStore, upgrader, *broker)
+	s := handler.NewHandlerState(dmp, *fileStore, upgrader, *broker)
 
 	http.HandleFunc("/write", s.Write)
 	http.HandleFunc("/", s.Home)

@@ -11,11 +11,10 @@ import (
 )
 
 type HandlerState struct {
-	numClients int
-	dmp        *diffmatchpatch.DiffMatchPatch
-	fileStore  storage.FileStore
-	upgrader   websocket.Upgrader
-	broker     broker.Broker[Broadcast]
+	dmp       *diffmatchpatch.DiffMatchPatch
+	fileStore storage.FileStore
+	upgrader  websocket.Upgrader
+	broker    broker.Broker[Broadcast]
 	// the string in both these cases is a uuid
 	mu             *sync.Mutex
 	clientIndexMap map[string]int
@@ -76,7 +75,6 @@ func (s *HandlerState) removeClient(id string) {
 
 func NewHandlerState(
 	dmp *diffmatchpatch.DiffMatchPatch,
-	numClients int,
 	fileStore storage.FileStore,
 	upgrader websocket.Upgrader,
 	broker broker.Broker[Broadcast],
@@ -86,7 +84,6 @@ func NewHandlerState(
 	clientInfoList := make([]ClientState, 0)
 
 	return &HandlerState{
-		numClients:     numClients,
 		dmp:            dmp,
 		fileStore:      fileStore,
 		upgrader:       upgrader,
