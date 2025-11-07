@@ -66,24 +66,21 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	var first = true
+
 	for {
 		select {
 		case m := <-messageCh:
-			// parse the message
-			// TODO: the go routine could do this
-			payload, err := MarshalMyResponse(&ClientResponse{Count: len(s.clientInfoList)})
-			if err != nil {
-				log.Printf("marshal response: %v", err)
-				return
-			}
-			if err := c.WriteJSON(payload); err != nil {
-				return
-			}
-
 			// if there are no patch objs, it's probably the first request
-			if len(m.PatchObjs) == 0 {
+			if len(m.PatchObjs) == 0 && first {
+				first = false
+				// send the initial state
+				log.Printf("sending initial state to %s", clientAddr)
 				if len(s.clientInfoList) == 1 && s.clientIndexMap[connectionId] == 0 {
-					payload, err := MarshalMyResponse(&StateResponse{State: "EDITOR", InitialDoc: s.fileStore.Read()})
+					response := &StateResponse{State: "EDITOR", InitialDoc: s.fileStore.Read()}
+					payload, err := MarshalMyResponse(response)
+					log.Printf("sending initial state to %s: %v", clientAddr, response)
+					log.Printf("sending initial state to %s: %v", clientAddr, payload)
 					if err != nil {
 						log.Printf("marshal response: %v", err)
 						return
@@ -100,10 +97,19 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 					if err := c.WriteJSON(payload); err != nil {
 						return
 					}
+					clientPayload, clientErr := MarshalMyResponse(&ClientResponse{Count: len(s.clientInfoList)})
+					if clientErr != nil {
+						log.Printf("marshal response: %v", clientErr)
+						return
+					}
+					if err := c.WriteJSON(clientPayload); err != nil {
+						return
+					}
 				}
+				continue
 			}
 
-			// if there are patch obj and this client is the editor, we'll apply them to the file
+			// if there are patch objs and this client is the editor, we'll apply them to the file
 			if len(m.PatchObjs) >= 1 && s.clientIndexMap[connectionId] == 0 {
 				// convert PatchObjs to library Patch type
 				dmpPatches := make([]diffmatchpatch.Patch, 0, len(m.PatchObjs))
@@ -121,16 +127,8 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 					log.Printf("write %s: %v", clientAddr, err)
 					return
 				}
-			} else {
-				payload, err := MarshalMyResponse(&ReaderResponse{Status: "OK", Doc: s.fileStore.Read()})
-				if err != nil {
-					log.Printf("marshal response: %v", err)
-					return
-				}
-				if err := c.WriteJSON(payload); err != nil {
-					log.Printf("write %s: %v", clientAddr, err)
-					return
-				}
+				// publish to all other clients that there's an update
+				s.broker.Publish(Broadcast{})
 			}
 		case <-broadcastCh:
 			log.Printf("got a broadcast: %v", len(s.clientInfoList))
@@ -141,6 +139,17 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 			}
 			if err := c.WriteJSON(payload); err != nil {
 				return
+			}
+			if s.clientIndexMap[connectionId] != 0 {
+				readerPayload, readerErr := MarshalMyResponse(&ReaderResponse{Status: "OK", Doc: s.fileStore.Read()})
+				if readerErr != nil {
+					log.Printf("marshal response: %v", readerErr)
+					return
+				}
+				if err := c.WriteJSON(readerPayload); err != nil {
+					log.Printf("write %s: %v", clientAddr, err)
+					return
+				}
 			}
 		case err := <-errCh:
 			log.Printf("read %s: %v", clientAddr, err)

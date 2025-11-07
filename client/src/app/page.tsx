@@ -1,12 +1,13 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
 import diff_match_patch from "diff-match-patch";
-import { ReactMDEditor } from "./editors/react-md-editor";
 import { Diff, Message, MyResponse, PatchObj } from "./protocol";
 import { OnChange } from "./editors/types";
 import { MilkdownEditor } from "./editors/milkdown-editor";
+import { ReadOnlyMilkdownEditor } from "./editors/read-only-milkdown-editor";
 
-const SERVER_URL = "ws://100.116.9.20:8000/write";
+// const SERVER_URL = "ws://100.116.9.20:8000/write";
+const SERVER_URL = "ws://localhost:8000/write";
 
 const FIRST_MESSAGE: Message = {
   patches: [],
@@ -21,9 +22,7 @@ export default function Home() {
   const [isOpen, setIsOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>();
   const [clientCount, setClientCount] = useState<number | null>(null);
-  const [editorState, setEditorState] = useState<"EDITOR" | "READER" | null>(
-    null
-  );
+  const editorStateRef = useRef("");
 
   useEffect(() => {
     ws.current = new WebSocket(SERVER_URL);
@@ -63,18 +62,18 @@ export default function Home() {
         }
         case "state": {
           if (message.state === "EDITOR") {
-            setEditorState("EDITOR");
+            editorStateRef.current = "EDITOR";
             setInitialValue(message.initialDoc);
             syncedValueRef.current = message.initialDoc;
           } else {
-            setEditorState("READER");
+            editorStateRef.current = "READER";
+            setInitialValue(message.initialDoc);
           }
           break;
         }
         case "reader": {
           if (message.status === "OK") {
             setInitialValue(message.doc);
-            syncedValueRef.current = message.doc;
           }
           break;
         }
@@ -99,10 +98,6 @@ export default function Home() {
 
   const onChange: OnChange = (val) => {
     if (!ws.current) return;
-    console.log("onChange called");
-    console.log("editor state", editorState);
-
-    if (editorState !== "EDITOR") return;
 
     clearTimeout(timeoutRef.current);
 
@@ -113,7 +108,7 @@ export default function Home() {
     }
 
     timeoutRef.current = setTimeout(() => {
-      if (ws.current) {
+      if (ws.current && editorStateRef.current === "EDITOR") {
         const previousSyncedValue = syncedValueRef.current;
         const patches = diffMatchPatch.diff_main(
           previousSyncedValue,
@@ -151,16 +146,23 @@ export default function Home() {
         style={{ gridTemplateColumns: "1fr 200px" }}
       >
         <div
-          className="border rounded-md border-gray-300 p-4 overflow-scroll"
+          className="border rounded-md border-gray-300 overflow-scroll p-4"
           style={{ height: "36rem" }}
         >
-          {/* <ReactMDEditor initialValue={initialValue} onChange={onChange} /> */}
-          <MilkdownEditor initialValue={initialValue} onChange={onChange} />
+          {editorStateRef.current === "EDITOR" ? (
+            <MilkdownEditor
+              initialValue={initialValue}
+              onChange={onChange}
+              editable={editorStateRef.current === "EDITOR"}
+            />
+          ) : (
+            <ReadOnlyMilkdownEditor value={initialValue} />
+          )}
         </div>
         <div className="border rounded-md border-gray-300 p-4 max-h-20">
           clients: {clientCount}
           <br />
-          editorState: {editorState}
+          editorState: {editorStateRef.current}
         </div>
       </div>
     </div>

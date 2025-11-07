@@ -24,7 +24,7 @@ func (ReaderResponse) isMyResponse() {}
 
 type EditorResponse struct {
 	Status string `json:"status"`
-	Doc    string `json:"doc,omitempty"`
+	Doc    string `json:"doc"`
 }
 
 func (EditorResponse) isMyResponse() {}
@@ -37,11 +37,11 @@ func (ClientResponse) isMyResponse() {}
 
 type responseEnvelope struct {
 	Type       string `json:"type"`
-	State      string `json:"state,omitempty"`
-	Status     string `json:"status,omitempty"`
-	Doc        string `json:"doc,omitempty"`
-	InitialDoc string `json:"initialDoc,omitempty"`
-	Count      int    `json:"count,omitempty"`
+	State      string `json:"state"`
+	Status     string `json:"status"`
+	Doc        string `json:"doc"`
+	InitialDoc string `json:"initialDoc"`
+	Count      int    `json:"count"`
 }
 
 func MarshalMyResponse(resp MyResponse) (responseEnvelope, error) {
