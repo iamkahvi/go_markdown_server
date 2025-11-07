@@ -30,6 +30,7 @@ export interface ReaderResponse {
 export interface EditorResponse {
   type: "editor";
   status: "OK" | "ERROR";
+  // this should be removed eventually
   doc?: string;
 }
 

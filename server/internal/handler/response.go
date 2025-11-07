@@ -8,6 +8,20 @@ type MyResponse interface {
 	isMyResponse()
 }
 
+type StateResponse struct {
+	State      string `json:"state"`
+	InitialDoc string `json:"initialDoc"`
+}
+
+func (StateResponse) isMyResponse() {}
+
+type ReaderResponse struct {
+	Status string `json:"status"`
+	Doc    string `json:"doc"`
+}
+
+func (ReaderResponse) isMyResponse() {}
+
 type EditorResponse struct {
 	Status string `json:"status"`
 	Doc    string `json:"doc,omitempty"`
@@ -22,10 +36,12 @@ type ClientResponse struct {
 func (ClientResponse) isMyResponse() {}
 
 type responseEnvelope struct {
-	Type   string `json:"type"`
-	Status string `json:"status,omitempty"`
-	Doc    string `json:"doc,omitempty"`
-	Count  int    `json:"count,omitempty"`
+	Type       string `json:"type"`
+	State      string `json:"state,omitempty"`
+	Status     string `json:"status,omitempty"`
+	Doc        string `json:"doc,omitempty"`
+	InitialDoc string `json:"initialDoc,omitempty"`
+	Count      int    `json:"count,omitempty"`
 }
 
 func MarshalMyResponse(resp MyResponse) (responseEnvelope, error) {
@@ -55,6 +71,30 @@ func MarshalMyResponse(resp MyResponse) (responseEnvelope, error) {
 		return responseEnvelope{
 			Type:  "client",
 			Count: r.Count,
+		}, nil
+	case ReaderResponse:
+		return responseEnvelope{
+			Type:   "reader",
+			Status: r.Status,
+			Doc:    r.Doc,
+		}, nil
+	case *ReaderResponse:
+		return responseEnvelope{
+			Type:   "reader",
+			Status: r.Status,
+			Doc:    r.Doc,
+		}, nil
+	case StateResponse:
+		return responseEnvelope{
+			Type:       "state",
+			State:      r.State,
+			InitialDoc: r.InitialDoc,
+		}, nil
+	case *StateResponse:
+		return responseEnvelope{
+			Type:       "state",
+			State:      r.State,
+			InitialDoc: r.InitialDoc,
 		}, nil
 	default:
 		return responseEnvelope{}, fmt.Errorf("unsupported MyResponse: %T", resp)

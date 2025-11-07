@@ -82,18 +82,29 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 
 			// if there are no patch objs, it's probably the first request
 			if len(m.PatchObjs) == 0 {
-				payload, err := MarshalMyResponse(&EditorResponse{Status: "OK", Doc: s.fileStore.Read()})
-				if err != nil {
-					log.Printf("marshal response: %v", err)
-					return
-				}
-				if err := c.WriteJSON(payload); err != nil {
-					return
+				if len(s.clientInfoList) == 1 && s.clientIndexMap[connectionId] == 0 {
+					payload, err := MarshalMyResponse(&StateResponse{State: "EDITOR", InitialDoc: s.fileStore.Read()})
+					if err != nil {
+						log.Printf("marshal response: %v", err)
+						return
+					}
+					if err := c.WriteJSON(payload); err != nil {
+						return
+					}
+				} else {
+					payload, err := MarshalMyResponse(&StateResponse{State: "READER", InitialDoc: s.fileStore.Read()})
+					if err != nil {
+						log.Printf("marshal response: %v", err)
+						return
+					}
+					if err := c.WriteJSON(payload); err != nil {
+						return
+					}
 				}
 			}
 
 			// if there are patch obj and this client is the editor, we'll apply them to the file
-			if len(m.PatchObjs) >= 1 {
+			if len(m.PatchObjs) >= 1 && s.clientIndexMap[connectionId] == 0 {
 				// convert PatchObjs to library Patch type
 				dmpPatches := make([]diffmatchpatch.Patch, 0, len(m.PatchObjs))
 				for _, po := range m.PatchObjs {
@@ -102,6 +113,16 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 				result, _ := s.dmp.PatchApply(dmpPatches, s.fileStore.Read())
 				s.fileStore.Write([]byte(result))
 				payload, err := MarshalMyResponse(&EditorResponse{Status: "OK"})
+				if err != nil {
+					log.Printf("marshal response: %v", err)
+					return
+				}
+				if err := c.WriteJSON(payload); err != nil {
+					log.Printf("write %s: %v", clientAddr, err)
+					return
+				}
+			} else {
+				payload, err := MarshalMyResponse(&ReaderResponse{Status: "OK", Doc: s.fileStore.Read()})
 				if err != nil {
 					log.Printf("marshal response: %v", err)
 					return

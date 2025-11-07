@@ -21,6 +21,9 @@ export default function Home() {
   const [isOpen, setIsOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>();
   const [clientCount, setClientCount] = useState<number | null>(null);
+  const [editorState, setEditorState] = useState<"EDITOR" | "READER" | null>(
+    null
+  );
 
   useEffect(() => {
     ws.current = new WebSocket(SERVER_URL);
@@ -50,12 +53,6 @@ export default function Home() {
           setClientCount(message.count);
           break;
         case "editor": {
-          if (message.status === "OK" && message.doc) {
-            // set the initial value of the editor
-            setInitialValue(message.doc);
-            syncedValueRef.current = message.doc;
-          }
-
           if (message.status === "ERROR") {
             console.log("ERROR from server");
             // stop showing editor
@@ -65,9 +62,20 @@ export default function Home() {
           break;
         }
         case "state": {
+          if (message.state === "EDITOR") {
+            setEditorState("EDITOR");
+            setInitialValue(message.initialDoc);
+            syncedValueRef.current = message.initialDoc;
+          } else {
+            setEditorState("READER");
+          }
           break;
         }
         case "reader": {
+          if (message.status === "OK") {
+            setInitialValue(message.doc);
+            syncedValueRef.current = message.doc;
+          }
           break;
         }
       }
@@ -91,6 +99,10 @@ export default function Home() {
 
   const onChange: OnChange = (val) => {
     if (!ws.current) return;
+    console.log("onChange called");
+    console.log("editor state", editorState);
+
+    if (editorState !== "EDITOR") return;
 
     clearTimeout(timeoutRef.current);
 
@@ -147,6 +159,8 @@ export default function Home() {
         </div>
         <div className="border rounded-md border-gray-300 p-4 max-h-20">
           clients: {clientCount}
+          <br />
+          editorState: {editorState}
         </div>
       </div>
     </div>
