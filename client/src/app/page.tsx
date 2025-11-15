@@ -1,37 +1,12 @@
 "use client";
 import React, { useRef, useEffect, useState } from "react";
-import type { ContextStore } from "@uiw/react-md-editor";
 import diff_match_patch from "diff-match-patch";
-import Editor from "./editor";
+import { Diff, Message, MyResponse, PatchObj } from "./protocol";
+import { OnChange } from "./editors/types";
+import { MilkdownEditor } from "./editors/milkdown-editor";
+import { ReadOnlyMilkdownEditor } from "./editors/read-only-milkdown-editor";
 
-type OnChange = (
-  value?: string,
-  event?: React.ChangeEvent<HTMLTextAreaElement>,
-  state?: ContextStore
-) => void;
-
-type Diff = [number, string];
-
-type PatchObj = {
-  diffs: Diff[];
-  start1: number | null;
-  start2: number | null;
-  length1: number;
-  length2: number;
-};
-
-type Patch = [-1 | 0 | 1, string];
-
-interface Message {
-  patches: Patch[];
-  patchObjs: PatchObj[];
-}
-
-interface MyResponse {
-  status: "OK" | "ERROR";
-  doc?: string;
-}
-
+// const SERVER_URL = "ws://100.116.9.20:8000/write";
 const SERVER_URL = "ws://localhost:8000/write";
 
 const FIRST_MESSAGE: Message = {
@@ -42,10 +17,12 @@ const FIRST_MESSAGE: Message = {
 export default function Home() {
   const diffMatchPatch = new diff_match_patch();
   const ws = useRef<WebSocket | null>(null);
-  const [value, setValue] = useState("");
-  const [syncedValue, setSyncedValue] = useState("");
+  const [initialValue, setInitialValue] = useState<string | null>(null);
+  const syncedValueRef = useRef("");
   const [isOpen, setIsOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>();
+  const [clientCount, setClientCount] = useState<number | null>(null);
+  const editorStateRef = useRef("");
 
   useEffect(() => {
     ws.current = new WebSocket(SERVER_URL);
@@ -68,16 +45,38 @@ export default function Home() {
     ws.current.onmessage = function (evt) {
       const message: MyResponse = JSON.parse(evt.data);
 
-      console.log("RECEIVED: " + JSON.stringify(message));
-      if (message.status === "OK" && message.doc) {
-        console.log("OK from server, doc: ", message.doc);
-        setValue(message.doc);
-        setSyncedValue(message.doc);
-      }
+      console.log(`RECEIVED ${message.type}: ` + JSON.stringify(message));
 
-      if (message.status === "ERROR") {
-        console.log("ERROR from server");
-        // stop showing editor
+      switch (message.type) {
+        case "client":
+          setClientCount(message.count);
+          break;
+        case "editor": {
+          if (message.status === "ERROR") {
+            console.log("ERROR from server");
+            // stop showing editor
+            setIsOpen(false);
+            window.alert("An error occurred while syncing with the server.");
+          }
+          break;
+        }
+        case "state": {
+          if (message.state === "EDITOR") {
+            editorStateRef.current = "EDITOR";
+            setInitialValue(message.initialDoc);
+            syncedValueRef.current = message.initialDoc;
+          } else {
+            editorStateRef.current = "READER";
+            setInitialValue(message.initialDoc);
+          }
+          break;
+        }
+        case "reader": {
+          if (message.status === "OK") {
+            setInitialValue(message.doc);
+          }
+          break;
+        }
       }
     };
 
@@ -93,6 +92,10 @@ export default function Home() {
     };
   }, [setIsOpen]);
 
+  useEffect(() => {
+    document.title = `note: ${clientCount}`;
+  }, [clientCount]);
+
   const onChange: OnChange = (val) => {
     if (!ws.current) return;
 
@@ -105,11 +108,14 @@ export default function Home() {
     }
 
     timeoutRef.current = setTimeout(() => {
-      setSyncedValue(messageData);
-      if (ws.current) {
-        const patches = diffMatchPatch.diff_main(syncedValue, messageData);
+      if (ws.current && editorStateRef.current === "EDITOR") {
+        const previousSyncedValue = syncedValueRef.current;
+        const patches = diffMatchPatch.diff_main(
+          previousSyncedValue,
+          messageData
+        );
         const patchObjs: PatchObj[] = diffMatchPatch
-          .patch_make(syncedValue, messageData)
+          .patch_make(previousSyncedValue, messageData)
           .map((patch: any) => {
             return {
               diffs: patch.diffs as Diff[],
@@ -119,21 +125,46 @@ export default function Home() {
               length2: patch.length2,
             };
           });
-        // TODO: i should be sending patches to the server, not the whole document
         const message: Message = { patches, patchObjs };
+        syncedValueRef.current = messageData;
         console.log("sending: ", message);
         ws.current.send(JSON.stringify(message));
       }
     }, 50);
-
-    setValue(messageData);
   };
 
   if (!isOpen) return <div>loading</div>;
 
   return (
-    <main className=" w-auto mx-auto p-4">
-      <Editor value={value} onChange={onChange} />
-    </main>
+    <div className="ml-auto mr-auto max-w-4xl">
+      <div>
+        <h1 className="text-3xl font-bold underline p-4">kahvi's notepad</h1>
+      </div>
+      <div
+        className="w-auto grid gap-4 mx-4"
+        // TODO: make this responsive 🤦‍♂️
+        style={{ gridTemplateColumns: "1fr" }}
+      >
+        <div
+          className="border rounded-md border-gray-300 overflow-scroll p-4"
+          style={{ height: "36rem" }}
+        >
+          {editorStateRef.current === "EDITOR" ? (
+            <MilkdownEditor
+              initialValue={initialValue}
+              onChange={onChange}
+              editable={editorStateRef.current === "EDITOR"}
+            />
+          ) : (
+            <ReadOnlyMilkdownEditor value={initialValue} />
+          )}
+        </div>
+        <div className="border rounded-md border-gray-300 p-4 max-h-20">
+          clients: {clientCount}
+          <br />
+          editorState: {editorStateRef.current}
+        </div>
+      </div>
+    </div>
   );
 }

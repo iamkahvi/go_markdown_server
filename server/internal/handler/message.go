@@ -7,6 +7,10 @@ import (
 	"github.com/iamkahvi/text_editor_server/internal/diff"
 )
 
+type Broadcast struct {
+	sourceClientId string
+}
+
 type Message struct {
 	Patches   []diff.Patch    `json:"patches"`
 	PatchObjs []diff.PatchObj `json:"patchObjs"`
@@ -60,7 +64,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type MyResponse struct {
-	Status string `json:"status"`
-	Doc    string `json:"doc,omitempty"`
-}
+// type MyResponse struct {
+// 	Status string `json:"status"`
+// 	Doc    string `json:"doc,omitempty"`
+// }
