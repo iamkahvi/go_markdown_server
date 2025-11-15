@@ -143,7 +143,7 @@ export default function Home() {
       <div
         className="w-auto grid gap-4 mx-4"
         // TODO: make this responsive 🤦‍♂️
-        style={{ gridTemplateColumns: "1fr 200px" }}
+        style={{ gridTemplateColumns: "1fr" }}
       >
         <div
           className="border rounded-md border-gray-300 overflow-scroll p-4"

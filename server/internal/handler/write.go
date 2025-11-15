@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -26,16 +27,18 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 	c, err := s.upgrader.Upgrade(w, r, nil)
 	connectionId := uuid.New().String()
 	s.addClient(connectionId)
-	s.broker.Publish(Broadcast{})
+	s.broker.Publish(Broadcast{sourceClientId: connectionId})
 
 	messageCh := make(chan Message, 1)
 	errCh := make(chan error, 1)
 	broadcastCh := s.broker.Subscribe()
 
+	requestNumber := 0
+
 	defer func() {
-		log.Printf("closing the connection")
+		logWithPrefix(connectionId, requestNumber, "closing the connection")
 		s.removeClient(connectionId)
-		s.broker.Publish(Broadcast{})
+		s.broker.Publish(Broadcast{sourceClientId: connectionId})
 		s.broker.Unsubscribe(broadcastCh)
 		close(messageCh)
 		close(errCh)
@@ -74,13 +77,14 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 			// if there are no patch objs, it's probably the first request
 			if len(m.PatchObjs) == 0 && first {
 				first = false
+
 				// send the initial state
-				log.Printf("sending initial state to %s", clientAddr)
+				logWithPrefix(connectionId, requestNumber, "sending initial state")
 				if len(s.clientInfoList) == 1 && s.clientIndexMap[connectionId] == 0 {
 					response := &StateResponse{State: "EDITOR", InitialDoc: s.fileStore.Read()}
 					payload, err := MarshalMyResponse(response)
-					log.Printf("sending initial state to %s: %v", clientAddr, response)
-					log.Printf("sending initial state to %s: %v", clientAddr, payload)
+					logWithPrefix(connectionId, requestNumber, fmt.Sprintf("sending initial state: %v", response))
+					logWithPrefix(connectionId, requestNumber, fmt.Sprintf("sending initial state: %v", payload))
 					if err != nil {
 						log.Printf("marshal response: %v", err)
 						return
@@ -91,7 +95,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 				} else {
 					payload, err := MarshalMyResponse(&StateResponse{State: "READER", InitialDoc: s.fileStore.Read()})
 					if err != nil {
-						log.Printf("marshal response: %v", err)
+						logWithPrefix(connectionId, requestNumber, fmt.Sprintf("marshal response: %v", err))
 						return
 					}
 					if err := c.WriteJSON(payload); err != nil {
@@ -99,7 +103,7 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 					}
 					clientPayload, clientErr := MarshalMyResponse(&ClientResponse{Count: len(s.clientInfoList)})
 					if clientErr != nil {
-						log.Printf("marshal response: %v", clientErr)
+						logWithPrefix(connectionId, requestNumber, fmt.Sprintf("marshal response: %v", clientErr))
 						return
 					}
 					if err := c.WriteJSON(clientPayload); err != nil {
@@ -117,43 +121,74 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 					dmpPatches = append(dmpPatches, po.ToDMP(s.dmp))
 				}
 				result, _ := s.dmp.PatchApply(dmpPatches, s.fileStore.Read())
+				logWithPrefix(connectionId, requestNumber, "applying patches")
 				s.fileStore.Write([]byte(result))
 				payload, err := MarshalMyResponse(&EditorResponse{Status: "OK"})
 				if err != nil {
-					log.Printf("marshal response: %v", err)
+					logWithPrefix(connectionId, requestNumber, fmt.Sprintf("marshal response: %v", err))
 					return
 				}
 				if err := c.WriteJSON(payload); err != nil {
-					log.Printf("write %s: %v", clientAddr, err)
+					logWithPrefix(connectionId, requestNumber, fmt.Sprintf("write %s: %v", clientAddr, err))
 					return
 				}
 				// publish to all other clients that there's an update
-				s.broker.Publish(Broadcast{})
+				s.broker.Publish(Broadcast{sourceClientId: connectionId})
 			}
-		case <-broadcastCh:
-			log.Printf("got a broadcast: %v", len(s.clientInfoList))
+		case b := <-broadcastCh:
+			// on broadcast, send the updated client count to all clients
+
+			if b.sourceClientId == connectionId {
+				continue
+			}
+			logWithPrefix(connectionId, requestNumber, fmt.Sprintf("got a broadcast: %v", len(s.clientInfoList)))
 			payload, err := MarshalMyResponse(&ClientResponse{Count: len(s.clientInfoList)})
 			if err != nil {
-				log.Printf("marshal response: %v", err)
+				logWithPrefix(connectionId, requestNumber, fmt.Sprintf("marshal response: %v", err))
 				return
 			}
 			if err := c.WriteJSON(payload); err != nil {
 				return
 			}
-			if s.clientIndexMap[connectionId] != 0 {
-				readerPayload, readerErr := MarshalMyResponse(&ReaderResponse{Status: "OK", Doc: s.fileStore.Read()})
+
+			// if the client is first in line, send them a state response to become editor
+			if s.clientIndexMap[connectionId] == 0 {
+				readerPayload, readerErr := MarshalMyResponse(&StateResponse{State: "EDITOR", InitialDoc: s.fileStore.Read()})
 				if readerErr != nil {
-					log.Printf("marshal response: %v", readerErr)
+					logWithPrefix(connectionId, requestNumber, fmt.Sprintf("marshal response: %v", readerErr))
 					return
 				}
 				if err := c.WriteJSON(readerPayload); err != nil {
-					log.Printf("write %s: %v", clientAddr, err)
+					logWithPrefix(connectionId, requestNumber, fmt.Sprintf("write %s: %v", clientAddr, err))
+					return
+				}
+			} else {
+				// if the client is not first in line, send them a reader response
+				readerPayload, readerErr := MarshalMyResponse(&ReaderResponse{Status: "OK", Doc: s.fileStore.Read()})
+				if readerErr != nil {
+					logWithPrefix(connectionId, requestNumber, fmt.Sprintf("marshal response: %v", readerErr))
+					return
+				}
+				if err := c.WriteJSON(readerPayload); err != nil {
+					logWithPrefix(connectionId, requestNumber, fmt.Sprintf("write %s: %v", clientAddr, err))
 					return
 				}
 			}
 		case err := <-errCh:
-			log.Printf("read %s: %v", clientAddr, err)
+			logWithPrefix(connectionId, requestNumber, fmt.Sprintf("read %s: %v", clientAddr, err))
 			return
 		}
+		requestNumber++
 	}
+}
+
+// builds the logging prefix for a given connection and request number
+// example output: [qew4u23e4 - 3]
+func loggingPrefix(connectionId string, requestNumber int) string {
+	return "[" + connectionId + " - " + fmt.Sprintf("%d", requestNumber) + "]"
+}
+
+func logWithPrefix(connectionId string, requestNumber int, message string) {
+	prefix := loggingPrefix(connectionId, requestNumber)
+	log.Printf("%s %s", prefix, message)
 }
