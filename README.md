@@ -2,7 +2,7 @@
 
 my effort at building google docs but it's one doc and it's markdown.
 
-![v1](assets/v1.png)
+![v1](assets/v1.1.png)
 
 ## specs
 

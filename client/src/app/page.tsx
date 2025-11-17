@@ -13,13 +13,9 @@ export default function Home() {
   if (status === "disconnected") return <div>disconnected</div>;
 
   return (
-    <div className="ml-auto mr-auto max-w-4xl my-4">
-      <div>
-        <h1 className="text-3xl font-bold underline pt-2 pb-5">
-          kahvi's notepad
-        </h1>
-      </div>
-      <div className="w-auto grid gap-4 mx-4">
+    <div className="ml-auto mr-auto max-w-xl py-4">
+      <div className="container w-auto grid gap-4 mx-4">
+        <h1 className="text-3xl font-bold underline pt-2">kahvi's notepad</h1>
         <StatusBar
           clientCount={info.clientCount}
           editorState={info.editorState}

@@ -40,7 +40,7 @@ body {
 }
 
 /* Responsive layout for editor using modern CSS Grid and Flexbox */
-@supports selector(body > div:has(.editor)) {
+.container {
   body {
     overflow: hidden;
     display: flex;
