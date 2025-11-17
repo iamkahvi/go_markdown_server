@@ -1,9 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: orange;
+  --foreground: purple;
+  --editor-background: white;
 }
+
 
 @theme inline {
   --color-background: var(--background);
@@ -14,8 +16,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* --background: #0a0a0a;
+    --foreground: #ededed; */
   }
 }
 
@@ -23,4 +25,45 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  border-width: 10px;
+  height: 100vh;
+  overflow: scroll;
+}
+
+.info {
+  background: var(--editor-background);
+  color: var(--foreground);
+}
+
+.editor {
+  background: var(--editor-background);
+  color: var(--foreground);
+  border-color: var(--foreground);
+}
+
+/* Chrome, Edge, Safari */
+*::-webkit-scrollbar {
+  width: 10px;             /* scrollbar thickness */
+}
+*::-webkit-scrollbar-track {
+  background-color: white;  /* track (background) color */
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #888;     /* draggable thumb */
+  border-radius: 6px;
+  border: 2px solid white;  /* lets the background peek through */
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #555;     /* darker on hover */
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;          /* or auto */
+  scrollbar-color: transparent transparent; /* thumb and track */
+  scrollbar-base-color: transparent;
+}
+
+html, body {
+  scrollbar-width: none; /* hides the bar, but scrolling remains */
 }

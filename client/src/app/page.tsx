@@ -146,7 +146,7 @@ export default function Home() {
         style={{ gridTemplateColumns: "1fr" }}
       >
         <div
-          className="border rounded-md border-gray-300 overflow-scroll p-4"
+          className="editor border rounded-md overflow-auto p-4"
           style={{ height: "36rem" }}
         >
           {editorStateRef.current === "EDITOR" ? (
@@ -159,7 +159,7 @@ export default function Home() {
             <ReadOnlyMilkdownEditor value={initialValue} />
           )}
         </div>
-        <div className="border rounded-md border-gray-300 p-4 max-h-20">
+        <div className="info border rounded-md p-4 max-h-20">
           clients: {clientCount}
           <br />
           editorState: {editorStateRef.current}
