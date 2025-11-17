@@ -1,12 +1,20 @@
 @import "tailwindcss";
 
+/* CSS Custom Properties for Theming */
 :root {
-  --background: orange;
-  --foreground: purple;
-  --editor-background: white;
+  color-scheme: light;
+  /* Color palette: Cotton background, dark green text */
+  --background: #F6F0ED;
+  --foreground: #6F732F;
+  --accent: #6F732F;
+  --border-color: #6F732F;
+  /* Border radius variables for consistency */
+  --border-radius-main: 0.5rem;
+  --border-radius-info: 0.25rem;
+  --border-radius-milkdown: 0.5rem;
 }
 
-
+/* Tailwind theme overrides */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -14,56 +22,163 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* --background: #0a0a0a;
-    --foreground: #ededed; */
-  }
+/* Base HTML and body styles */
+html,
+body {
+  height: 100%;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-  border-width: 10px;
-  height: 100vh;
-  overflow: scroll;
+  font-family: var(--font-sans, "Inter", "Helvetica Neue", Arial, sans-serif);
+  margin: 0;
+  min-height: 100%;
+  border-width: 0;
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
 }
 
-.info {
-  background: var(--editor-background);
-  color: var(--foreground);
+/* Responsive layout for editor using modern CSS Grid and Flexbox */
+@supports selector(body > div:has(.editor)) {
+  body {
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body > div:has(.editor) {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-bottom: 1rem;
+    overflow: hidden;
+  }
+
+  body > div:has(.editor) > * {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    width: min(100%, 64rem);
+    padding: 0 1.5rem;
+    margin: 0 auto;
+    min-height: 0;
+  }
+
+  body > div:has(.editor) > * > :last-child {
+    flex: 1 1 auto;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) auto;
+    min-height: 0;
+  }
+
+  body > div:has(.editor) > * > :last-child > .editor {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  body > div:has(.editor) > * > :last-child > .info {
+    min-height: 0;
+  }
 }
 
+/* Shared styles for info and editor components */
+.info,
 .editor {
-  background: var(--editor-background);
+  background: var(--background);
   color: var(--foreground);
-  border-color: var(--foreground);
+  border: 2px solid color-mix(in srgb, var(--border-color), transparent 80%);
+  border-radius: var(--border-radius-main);
+  backdrop-filter: blur(10px);
 }
 
-/* Chrome, Edge, Safari */
+/* Editor component styles */
+.editor {
+  outline: 1px solid transparent;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow-y: auto;
+  min-height: 0;
+  transition: border-color 0.2s ease;
+}
+
+.editor > * {
+  flex: 1 1 auto;
+}
+
+/* Highlight editor on focus */
+.editor:focus-within {
+  border-color: var(--accent);
+}
+
+/* Info component styles - static, informative panel */
+.info {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  padding: 1rem;
+  font-weight: 400;
+}
+
+/* Milkdown editor overrides for seamless integration */
+.milkdown {
+  color: var(--foreground);
+}
+
+.milkdown .editor {
+  background: transparent !important;
+  border: none !important;
+  border-radius: var(--border-radius-milkdown);
+  box-shadow: none !important;
+  backdrop-filter: none;
+  outline: none;
+  padding: 0;
+  transform: none !important;
+}
+
+.milkdown .editor:hover,
+.milkdown .editor:focus-within {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.milkdown .ProseMirror {
+  background: transparent;
+  color: var(--foreground);
+}
+
+/* Custom scrollbar styling for WebKit browsers */
 *::-webkit-scrollbar {
-  width: 10px;             /* scrollbar thickness */
+  width: 12px;
 }
+
 *::-webkit-scrollbar-track {
-  background-color: white;  /* track (background) color */
+  background-color: transparent;
 }
+
 *::-webkit-scrollbar-thumb {
-  background-color: #888;     /* draggable thumb */
-  border-radius: 6px;
-  border: 2px solid white;  /* lets the background peek through */
+  background-image: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb, var(--accent), transparent 50%) 100%);
+  border-radius: 999px;
+  border: 3px solid rgba(0, 0, 0, 0);
+  background-clip: padding-box;
 }
+
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #555;     /* darker on hover */
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent), transparent 5%) 0%,
+    color-mix(in srgb, var(--accent), transparent 35%) 100%
+  );
 }
 
-/* Firefox */
+/* Scrollbar styling for Firefox */
 * {
-  scrollbar-width: thin;          /* or auto */
-  scrollbar-color: transparent transparent; /* thumb and track */
-  scrollbar-base-color: transparent;
-}
-
-html, body {
-  scrollbar-width: none; /* hides the bar, but scrolling remains */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent), transparent 45%) transparent;
 }
