@@ -17,7 +17,7 @@ export function useEditorSync() {
   const ws = useRef<WebSocket | null>(null);
   const [value, setInitialValue] = useState<string | null>(null);
   const syncedValueRef = useRef("");
-  const [isOpen, setIsOpen] = useState(false);
+  const [status, setStatus] = useState<"loading" | "disconnected" | "connected">("loading");
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>();
   const [clientCount, setClientCount] = useState<number>(0);
   const editorStateRef = useRef("");
@@ -26,7 +26,7 @@ export function useEditorSync() {
     ws.current = new WebSocket(SERVER_URL);
 
     ws.current.onopen = function (evt) {
-      setIsOpen(true);
+      setStatus("connected");
       if (ws.current) {
         ws.current.send(JSON.stringify(FIRST_MESSAGE));
       }
@@ -34,7 +34,7 @@ export function useEditorSync() {
     };
 
     ws.current.onclose = function (evt) {
-      setIsOpen(false);
+      setStatus("disconnected");
       ws.current = null;
       console.log("CLOSE");
     };
@@ -51,7 +51,7 @@ export function useEditorSync() {
         case "editor": {
           if (message.status === "ERROR") {
             console.log("ERROR from server");
-            setIsOpen(false);
+            setStatus("disconnected");
             window.alert("An error occurred while syncing with the server.");
           }
           break;
@@ -77,7 +77,7 @@ export function useEditorSync() {
     };
 
     ws.current.onerror = function (evt: Event) {
-      setIsOpen(false);
+      setStatus("disconnected");
       console.log("ERROR: " + (evt as ErrorEvent).message);
     };
 
@@ -86,7 +86,7 @@ export function useEditorSync() {
     return () => {
       wsCurr.close();
     };
-  }, [setIsOpen]);
+  }, []);
 
   useEffect(() => {
     document.title = `${editorStateRef.current} - note`;
@@ -129,10 +129,12 @@ export function useEditorSync() {
   };
 
   return {
-    value,
-    isOpen,
-    clientCount,
-    editorState: editorStateRef.current,
+    editorValue: value,
     onChange,
+    status,
+    info: {
+      clientCount,
+      editorState: editorStateRef.current,
+    },
   };
 }
