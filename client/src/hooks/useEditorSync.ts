@@ -17,7 +17,9 @@ export function useEditorSync() {
   const ws = useRef<WebSocket | null>(null);
   const [value, setInitialValue] = useState<string | null>(null);
   const syncedValueRef = useRef("");
-  const [status, setStatus] = useState<"loading" | "disconnected" | "connected">("loading");
+  const [status, setStatus] = useState<
+    "loading" | "disconnected" | "connected"
+  >("loading");
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>();
   const [clientCount, setClientCount] = useState<number>(0);
   const editorStateRef = useRef("");
