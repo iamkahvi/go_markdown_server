@@ -92,6 +92,15 @@ func (s *HandlerState) Write(w http.ResponseWriter, r *http.Request) {
 					if err := c.WriteJSON(payload); err != nil {
 						return
 					}
+					payload, err = MarshalMyResponse(&ClientResponse{Count: len(s.clientInfoList)})
+					if err != nil {
+						logWithPrefix(connectionId, requestNumber, fmt.Sprintf("marshal response: %v", err))
+						return
+					}
+					if err := c.WriteJSON(payload); err != nil {
+						return
+					}
+
 				} else {
 					payload, err := MarshalMyResponse(&StateResponse{State: "READER", InitialDoc: s.fileStore.Read()})
 					if err != nil {
