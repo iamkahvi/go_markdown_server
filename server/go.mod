@@ -1,4 +1,4 @@
-module github.com/iamkahvi/text_editor_server
+module github.com/iamkahvi/notepad/server
 
 go 1.25.3
 

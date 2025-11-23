@@ -7,10 +7,10 @@ import (
 	"os"
 
 	"github.com/gorilla/websocket"
-	"github.com/iamkahvi/text_editor_server/config"
-	"github.com/iamkahvi/text_editor_server/internal/broker"
-	"github.com/iamkahvi/text_editor_server/internal/handler"
-	"github.com/iamkahvi/text_editor_server/internal/storage"
+	"github.com/iamkahvi/notepad/server/config"
+	"github.com/iamkahvi/notepad/server/internal/broker"
+	"github.com/iamkahvi/notepad/server/internal/handler"
+	"github.com/iamkahvi/notepad/server/internal/storage"
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
 

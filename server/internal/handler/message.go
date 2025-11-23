@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/iamkahvi/text_editor_server/internal/diff"
+	"github.com/iamkahvi/notepad/server/internal/diff"
 )
 
 type Broadcast struct {

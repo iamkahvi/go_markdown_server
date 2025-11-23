@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/iamkahvi/text_editor_server/internal/broker"
-	"github.com/iamkahvi/text_editor_server/internal/storage"
+	"github.com/iamkahvi/notepad/server/internal/broker"
+	"github.com/iamkahvi/notepad/server/internal/storage"
 	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
