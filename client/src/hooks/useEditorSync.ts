@@ -4,8 +4,8 @@ import diff_match_patch from "diff-match-patch";
 import { Diff, Message, MyResponse, PatchObj } from "../app/protocol";
 import { OnChange } from "../app/editors/types";
 
-// const SERVER_URL = "ws://100.116.9.20:8000/write";
-const SERVER_URL = "ws://localhost:8000/write";
+const SERVER_URL =
+  process.env.NEXT_PUBLIC_SERVER_ENDPOINT ?? "ws://localhost:8000/write";
 
 const FIRST_MESSAGE: Message = {
   patches: [],
