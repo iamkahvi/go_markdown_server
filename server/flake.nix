@@ -36,6 +36,7 @@
 							export DEV=1
               mkdir -p "$GOBIN"
 							alias s="go run ./cmd/server"
+              alias t="go test ./... -v"
             '';
           };
         });
